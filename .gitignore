@@ -1,0 +1,12 @@
+.gradle/
+**/build/
+**/run/
+.idea/
+*.iml
+*.tmp
+dist/
+.env
+.env.*
+!.env.example
+*.log
+hs_err_pid*

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "bettermusic",
+  "version": "${version}",
+  "name": "Better Music Overlay",
+  "description": "Your soundtrack. Your world. A customizable media HUD with native desktop integration.",
+  "environment": "client",
+  "entrypoints": { "client": ["dev.bettermusic.BetterMusic"] },
+  "license": "MIT",
+  "depends": { "fabricloader": ">=0.19.5", "minecraft": "${minecraft_version}", "java": ">=${java_version}", "fabric-api": "*" }
+}

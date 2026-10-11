@@ -1,0 +1,3 @@
+pluginManagement { repositories { maven { url = 'https://maven.fabricmc.net/' }; gradlePluginPortal() } }
+rootProject.name = 'BetterMusicOverlay'
+include 'mc12111', 'mc2610', 'mc2611', 'mc261', 'mc262', 'mc263'

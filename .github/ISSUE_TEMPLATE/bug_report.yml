@@ -1,0 +1,31 @@
+name: Bug report
+description: Report an overlay, playback, or lyrics problem.
+title: '[Bug] '
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Minecraft and mod versions
+      placeholder: Minecraft 1.21.11, Better Music Overlay 1.3.0
+    validations:
+      required: true
+  - type: input
+    id: player
+    attributes:
+      label: Windows version and music player
+      placeholder: Windows 11, Spotify desktop
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: What happened?
+      description: Describe the steps, expected behavior, and actual behavior. Screenshots are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Include the relevant error from latest.log or .better-music/bridge.log. Remove personal paths or track information you do not want to share.
+      render: text
