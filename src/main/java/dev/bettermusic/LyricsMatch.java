@@ -29,8 +29,9 @@ public final class LyricsMatch {
         JsonObject best=null;double distance=Double.MAX_VALUE;
         for(JsonElement item:records){if(!item.isJsonObject())continue;JsonObject record=item.getAsJsonObject();
             if(!matches(record,track,true))continue;
-            boolean synced=!string(record,"syncedLyrics").isBlank();if(!synced&&string(record,"plainLyrics").isBlank())continue;
-            double delta=Math.abs(record.get("duration").getAsDouble()-track.duration())+(synced?0:1000);
+            var rich=Lyricsfile.parse(string(record,"lyricsfile"));
+            boolean synced=!rich.lines().isEmpty()||!string(record,"syncedLyrics").isBlank();if(!synced&&rich.plain().isBlank()&&string(record,"plainLyrics").isBlank())continue;
+            double delta=Math.abs(record.get("duration").getAsDouble()-track.duration())+(rich.wordSync()?0:synced?100:1000);
             if(delta<distance){best=record;distance=delta;}
         }
         return best;

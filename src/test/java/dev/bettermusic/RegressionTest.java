@@ -70,4 +70,19 @@ class RegressionTest {
         Files.writeString(folder.resolve(LyricsService.filename(track(60))),"[00:10]<00:10>Your <00:11>world<00:12>\n[00:20]Next line");var s=new Settings();s.lyrics=true;
         try(var service=new LyricsService(folder)){service.update(track(60),s);loaded(service);assertEquals("",service.highlighted(track(60),s));assertEquals("♪ Instrumental",service.visible(track(60),s).get(0));}
     }
+    @Test void richLrclibRecordSuppliesWordsAndFractionalDuration()throws Exception{
+        var s=new Settings();s.lyrics=true;s.onlineLyrics=true;var track=new Track("Original","Example","TEST",false,10.5,60.4,"",System.nanoTime(),"Album");
+        try(var service=new LyricsService(folder,path->{assertTrue(path.contains("duration=60.4"));var j=record("[00:10]Legacy line","");j.addProperty("hasWordSync",true);j.addProperty("lyricsfile",LyricsfileTest.WORDS);return j;})){
+            service.update(track,s);loaded(service);assertEquals("LRCLIB · WORD SYNC",service.attribution());assertEquals("Your ",service.highlighted(track,s));
+            service.nudge(track,1);assertEquals("Your world",service.highlighted(track,s));
+        }
+    }
+    @Test void richFormatFailureKeepsLegacyLyricsAndSearchPrefersActualWords()throws Exception{
+        var s=new Settings();s.lyrics=true;s.onlineLyrics=true;
+        try(var service=new LyricsService(folder,path->{var j=record("[00:10]Legacy line","");j.addProperty("lyricsfile","version: '2.0'");return j;})){
+            service.update(track(60),s);loaded(service);assertEquals("Legacy line",service.visible(track(60),s).get(0));
+        }
+        var choices=new JsonArray();var legacy=record("[00:10]Legacy line","");var rich=record("","");rich.addProperty("id",43);rich.addProperty("lyricsfile",LyricsfileTest.WORDS);choices.add(legacy);choices.add(rich);
+        assertEquals(43,LyricsMatch.best(choices,track(60)).get("id").getAsLong());
+    }
 }

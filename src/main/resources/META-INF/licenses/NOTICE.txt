@@ -1,0 +1,7 @@
+Better Music Overlay includes SnakeYAML 2.7 (org.yaml:snakeyaml).
+Project: https://codeberg.org/snakeyaml/snakeyaml
+Authors include Andrey Somov and the SnakeYAML contributors.
+License: Apache License 2.0, reproduced in SnakeYAML-LICENSE.txt.
+
+The bundled Inter typeface uses the SIL Open Font License 1.1.
+Its copyright and license are in assets/bettermusic/font/ofl.txt.

@@ -16,7 +16,7 @@ class LyricsLiveTest {
         try(var service=new LyricsService(directory)){
             service.update(track,settings);long deadline=System.nanoTime()+20_000_000_000L;
             while(service.status().equals("Looking for lyrics ...")&&System.nanoTime()<deadline)Thread.sleep(50);
-            assertEquals("LRCLIB · LINE SYNC",service.attribution(),service.status());
+            assertTrue(service.attribution().equals("LRCLIB · LINE SYNC")||service.attribution().equals("LRCLIB · WORD SYNC"),service.status());
             assertTrue(service.sourceUrl().matches("https://lrclib.net/api/get/\\d+"));
             assertFalse(service.visible(track,settings).isEmpty());
             service.searchCandidates(track,settings);deadline=System.nanoTime()+20_000_000_000L;
@@ -24,7 +24,7 @@ class LyricsLiveTest {
             assertFalse(service.candidates().isEmpty(),service.candidateStatus());assertTrue(service.candidatesFor(track));
             long id=service.candidates().get(0).id();service.saveCorrection(track,.25,id,false);service.update(track,settings);deadline=System.nanoTime()+20_000_000_000L;
             while(service.status().equals("Looking for lyrics ...")&&System.nanoTime()<deadline)Thread.sleep(50);
-            assertEquals("LRCLIB · MANUAL MATCH",service.attribution(),service.status());assertEquals("https://lrclib.net/api/get/"+id,service.sourceUrl());
+            assertTrue(service.attribution().equals("LRCLIB · MANUAL MATCH")||service.attribution().equals("LRCLIB · WORD SYNC"),service.status());assertEquals("https://lrclib.net/api/get/"+id,service.sourceUrl());
             settings.onlineLyrics=false;service.update(track,settings);
             assertTrue(service.attribution().isEmpty(),"Changing consent must immediately clear previous attribution");
         }

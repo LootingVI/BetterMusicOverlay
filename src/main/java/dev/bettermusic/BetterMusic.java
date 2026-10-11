@@ -56,7 +56,7 @@ public final class BetterMusic implements ClientModInitializer {
         });
         HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,Identifier.fromNamespaceAndPath("bettermusic","overlay"),(g,delta)-> {
             var mc=net.minecraft.client.Minecraft.getInstance();
-            if(mc.screen instanceof StudioScreen || mc.screen instanceof AdvancedScreen || mc.screen instanceof LyricsScreen || mc.screen instanceof PositionScreen || mc.screen instanceof ControlScreen || !settings.enabled)return;
+            if(mc.screen instanceof StudioScreen || mc.screen instanceof AdvancedScreen || mc.screen instanceof LyricsScreen || mc.screen instanceof LyricsImportScreen || mc.screen instanceof PositionScreen || mc.screen instanceof ControlScreen || !settings.enabled)return;
             Track track=media.track();
             if(!track.present() && settings.hideIdle)return;
             Overlay.drawHud(g,track,mc.getWindow().getGuiScaledWidth(),mc.getWindow().getGuiScaledHeight());

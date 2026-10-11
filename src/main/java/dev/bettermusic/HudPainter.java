@@ -25,6 +25,20 @@ public final class HudPainter {
     }
     private static BufferedImage paletteImage;
     private static int paletteAccent;
+    private record Background(int width,int height,int radius,int tint,int surface,double opacity,boolean ambient,double density){}
+    private record CachedBackground(Background key,BufferedImage image){}
+    private static final ThreadLocal<CachedBackground> BACKGROUND=new ThreadLocal<>();
+    private static BufferedImage background(Style s,double density,int tint){
+        var key=new Background(s.width(),s.height(),s.radius(),tint,s.background(),s.opacity(),s.ambient(),density);var cached=BACKGROUND.get();
+        if(cached!=null&&cached.key().equals(key))return cached.image();
+        int w=s.width(),h=s.height();var image=new BufferedImage((int)Math.ceil(w*density),(int)Math.ceil(h*density),BufferedImage.TYPE_INT_ARGB);
+        var g=image.createGraphics();g.scale(density,density);g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+        var card=new RoundRectangle2D.Double(.5,.5,w-1,h-1,s.radius()*2,s.radius()*2);g.setClip(card);
+        Color surface=color(s.background(),(int)(255*s.opacity())),glow=blend(surface,color(tint,surface.getAlpha()),s.ambient()?.22:0);
+        g.setPaint(new GradientPaint(0,0,surface,w,h,glow));g.fill(card);
+        if(s.ambient()){g.setPaint(new RadialGradientPaint(new Point2D.Float(w,h),w*.8f,new float[]{0,1},new Color[]{color(tint,30),color(tint,0)}));g.fill(card);}
+        g.setColor(new Color(255,255,255,18));g.setStroke(new BasicStroke(.6f));g.draw(card);g.dispose();BACKGROUND.set(new CachedBackground(key,image));return image;
+    }
     private static synchronized int palette(BufferedImage image,int fallback){
         if(image==null)return fallback;
         if(image!=paletteImage){paletteImage=image;paletteAccent=ArtworkPalette.accent(image,-1);}
@@ -41,9 +55,14 @@ public final class HudPainter {
         return paint(s,t,cover,lyrics,density,clock,lyricClock,lyricSource,"");
     }
     public static BufferedImage paint(Style s,Track t,BufferedImage cover,List<String> lyrics,double density,double clock,double lyricClock,String lyricSource,String words) {
+        return paintInto(null,s,t,cover,lyrics,density,clock,lyricClock,lyricSource,words);
+    }
+    /** The worker owns this reusable surface; callers must not read it while another paint is running. */
+    public static BufferedImage paintInto(BufferedImage reuse,Style s,Track t,BufferedImage cover,List<String> lyrics,double density,double clock,double lyricClock,String lyricSource,String words) {
         int w=s.width(),h=s.height();
-        var image=new BufferedImage((int)Math.ceil(w*density),(int)Math.ceil(h*density),BufferedImage.TYPE_INT_ARGB);
-        var g=image.createGraphics();g.scale(density,density);
+        int pw=(int)Math.ceil(w*density),ph=(int)Math.ceil(h*density);
+        var image=reuse!=null&&reuse.getWidth()==pw&&reuse.getHeight()==ph?reuse:new BufferedImage(pw,ph,BufferedImage.TYPE_INT_ARGB);
+        var g=image.createGraphics();g.setComposite(AlphaComposite.Clear);g.fillRect(0,0,pw,ph);g.setComposite(AlphaComposite.SrcOver);g.scale(density,density);
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS,RenderingHints.VALUE_FRACTIONALMETRICS_ON);
@@ -52,10 +71,7 @@ public final class HudPainter {
         g.setClip(card);
         int tint=s.adaptive()?palette(cover,s.accent()):s.accent();
         Color surface=color(s.background(),(int)(255*s.opacity()));
-        Color glow=blend(surface,color(tint,surface.getAlpha()),s.ambient()?.22:0);
-        g.setPaint(new GradientPaint(0,0,surface,w,h,glow));g.fill(card);
-        if(s.ambient()) {g.setPaint(new RadialGradientPaint(new Point2D.Float(w,h),w*.8f,new float[]{0,1},new Color[]{color(tint,30),color(tint,0)}));g.fill(card);}
-        g.setColor(new Color(255,255,255,18));g.setStroke(new BasicStroke(.6f));g.draw(card);
+        g.drawImage(background(s,density,tint),0,0,w,h,null);
         Color fg=color(s.foreground(),255),muted=blend(fg,surface,.40),accent=color(tint,255);
         if(s.transitions()&&s.motion())g.setComposite(AlphaComposite.SrcOver.derive((float)(.35+.65*Math.min(1,Math.max(0,clock)/.35))));
         if(s.layout().equals("AURORA")) {

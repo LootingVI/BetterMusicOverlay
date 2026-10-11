@@ -8,7 +8,7 @@ import java.util.*;
 
 /** A scrollable transcript: only supplied timestamps can seek or follow playback. */
 public final class LyricsScreen extends Screen {
-    private record Row(String text,int index,double time){}
+    private record Row(String text,int index,double time,int start,String stamp){}
     private final Screen parent;
     private int left,top,pw,ph,viewTop,viewBottom;
     private double scroll;
@@ -30,10 +30,11 @@ public final class LyricsScreen extends Screen {
         timingButtons.add(button(left+16+bw,top+45,bw,"Lyrics later -0.25s",()->nudge(-.25)));
         timingButtons.add(button(left+20+bw*2,top+45,bw,"Reset song offset",()->{if(!currentTrack())return;var c=BetterMusic.lyrics.correction();try{BetterMusic.lyrics.saveCorrection(displayed,0,c.recording(),c.explicit());notice="Song offset reset";}catch(Exception e){notice="Could not save offset";}}));
         followButton=button(left+12,top+69,bw,follow?"Following playback":"Resume following",()->{follow=true;followButton.setMessage(Overlay.smoothText("Following playback"));});
-        button(left+16+bw,top+69,bw,"Online lookup: "+(BetterMusic.settings.onlineLyrics?"On":"Off"),()->{BetterMusic.settings.onlineLyrics=!BetterMusic.settings.onlineLyrics;BetterMusic.lyrics.update(BetterMusic.media.track(),BetterMusic.settings);BetterMusic.save();rebuildWidgets();});
+        button(left+16+bw,top+69,bw,"LRCLIB lookup: "+(BetterMusic.settings.onlineLyrics?"On":"Off"),()->{BetterMusic.settings.onlineLyrics=!BetterMusic.settings.onlineLyrics;BetterMusic.lyrics.update(BetterMusic.media.track(),BetterMusic.settings);BetterMusic.save();rebuildWidgets();});
         button(left+20+bw*2,top+69,bw,"Reload lyrics",()->BetterMusic.lyrics.reload());
         button(left+pw-84,top+ph-28,72,"Back",this::onClose);
         button(left+pw-180,top+ph-28,90,"Find recording",()->{var more=new AdvancedScreen(this);minecraft.setScreen(more);more.showPage(4);});
+        button(left+12,top+ph-28,80,"Import lyrics",()->minecraft.setScreen(new LyricsImportScreen(this)));
     }
     private StudioScreen.StudioButton button(int x,int y,int w,String label,Runnable action){return addRenderableWidget(new StudioScreen.StudioButton(x,y,w,20,label,action));}
     private boolean currentTrack(){if(!trackKey.equals(LyricCorrections.key(BetterMusic.media.track()))){notice="Track changed; wait for the new lyrics";return false;}return true;}
@@ -47,8 +48,11 @@ public final class LyricsScreen extends Screen {
         for(var button:timingButtons)button.active=timed;
         Object next=transcript.lines().isEmpty()?transcript.plain():transcript.lines();
         if(next!=content){content=next;var result=new ArrayList<Row>();
-            if(!transcript.lines().isEmpty())for(int i=0;i<transcript.lines().size();i++){var line=transcript.lines().get(i);for(String text:wrap(line.text().isBlank()?"♪ Instrumental":line.text(),pw-76))result.add(new Row(text,i,line.time()));}
-            else for(String line:transcript.plain())for(String text:wrap(line,pw-36))result.add(new Row(text,-1,Double.NaN));
+            if(!transcript.lines().isEmpty())for(int i=0;i<transcript.lines().size();i++){
+                var line=transcript.lines().get(i);int start=0,seconds=(int)line.time();String stamp=String.format(Locale.ROOT,"%d:%02d",seconds/60,seconds%60);
+                for(String text:wrap(line.text().isBlank()?"♪ Instrumental":line.text(),pw-76)){int at=Math.max(0,line.text().indexOf(text,start));result.add(new Row(text,i,line.time(),at,stamp));start=at+text.length();}
+            }
+            else for(String line:transcript.plain())for(String text:wrap(line,pw-36))result.add(new Row(text,-1,Double.NaN,0,""));
             rows=List.copyOf(result);
         }
         if(follow&&!transcript.lines().isEmpty()){
@@ -70,7 +74,7 @@ public final class LyricsScreen extends Screen {
         return parts.isEmpty()?List.of(""):parts;
     }
     @Override public void render(GuiGraphics g,int mx,int my,float delta){
-        g.fill(0,0,width,height,0xc5070910);Overlay.round(g,left,top,pw,ph,12,0xfc11121b);
+        UiSkin.backdrop(g,width,height,left,top,pw,ph);
         Track safe=Experience.privateTrack(displayed,BetterMusic.settings);
         String title=Experience.hidden(displayed,BetterMusic.settings)?"Private listening":safe.present()?safe.title():"Lyrics reader";
         Overlay.text(g,Overlay.fit(title,pw-28),left+14,top+12,0xffeeeafa);
@@ -82,13 +86,19 @@ public final class LyricsScreen extends Screen {
         for(int i=Math.max(0,(int)scroll/20);i<Math.min(rows.size(),(int)((scroll+viewBottom-viewTop)/20)+2);i++){
             Row row=rows.get(i);int y=viewTop+i*20-(int)scroll;
             boolean active=timed&&row.index()==transcript.current();
-            if(active)Overlay.round(g,left+10,y-2,pw-20,20,5,0xff30263f);
-            if(timed){int seconds=(int)row.time();Overlay.text(g,String.format(Locale.ROOT,"%d:%02d",seconds/60,seconds%60),left+16,y+4,0xff8e879e);}
-            Overlay.text(g,row.text(),left+(timed?56:16),y+4,active?0xffd7bcff:0xffc0bacf);
+            var line=timed?transcript.lines().get(row.index()):null;
+            if(active&&Double.isFinite(line.end())&&transcript.position()>=line.end())active=false;
+            if(active){UiSkin.surface(g,left+10,y-2,pw-20,20,UiSkin.SELECTED);Overlay.round(g,left+10,y+3,2,10,1,0xffcba2ef);}
+            if(timed)Overlay.text(g,row.stamp(),left+16,y+4,0xff8e879e);
+            Overlay.text(g,row.text(),left+(timed?56:16),y+4,active?0xffeae1f4:0xffb0a7bf);
+            if(active&&BetterMusic.settings.wordHighlight&&!line.words().isEmpty()){
+                int end=Math.max(0,Math.min(row.text().length(),line.highlighted(transcript.position()).length()-row.start()));
+                if(end>0)Overlay.text(g,row.text().substring(0,end),left+56,y+4,0xffcba2ef);
+            }
         }
         g.disableScissor();
         String footer=notice.isBlank()?(timed?"Scroll to browse; resume to follow.":"Plain text · scroll to read."):notice;
-        Overlay.text(g,Overlay.fit(footer,pw-212),left+14,top+ph-20,0xffaaa5bf);super.render(g,mx,my,delta);
+        Overlay.text(g,Overlay.fit(footer,pw-28),left+14,top+ph-41,0xffaaa5bf);super.render(g,mx,my,delta);
     }
     @Override public boolean mouseScrolled(double x,double y,double horizontal,double vertical){
         if(x>=left&&x<=left+pw&&y>=viewTop&&y<=viewBottom){follow=false;scroll=Settings.clamp(scroll-vertical*40,0,Math.max(0,rows.size()*20-(viewBottom-viewTop)));followButton.setMessage(Overlay.smoothText("Resume following"));return true;}

@@ -37,8 +37,20 @@ The cards below are rendered by the mod with original example track text. The re
 ![Full lyrics reader in Minecraft 1.21.11](docs/lyrics-reader-in-minecraft.png)
 ![Plain lyrics reader with manual scrolling](docs/plain-lyrics-in-minecraft.png)
 ![Per-recording lyrics corrections](docs/corrections-in-minecraft.png)
+![Local lyrics import](docs/import-in-minecraft.png)
+![Rendering presets](docs/rendering-in-minecraft.png)
 
 </details>
+
+## New in 1.4 — a redesigned studio and richer LRCLIB support
+
+The studio now has sidebar navigation, rounded controls, switches, a dedicated live preview, and a compact layout for smaller windows. Advanced settings and the lyrics reader share the same visual style. **O → Advanced → Rendering** offers **Quality (30 fps)**, **Balanced (20 fps, default)**, and **Saver (10 fps)** limits for the overlay renderer. These limits do not change Minecraft's frame limit. With Motion off, unchanged cards skip painting.
+
+Rendering reuses its image and upload buffers, caches the gradient background and UI surfaces, and uploads pixels in bulk. A local raster benchmark measured about **97% fewer Java allocations per frame** for a reused surface compared with allocating a fresh surface in the same renderer. This is a focused allocation measurement, not a claim about Minecraft FPS; see [performance notes](docs/PERFORMANCE.md).
+
+**O → Lyrics → LRCLIB lookup** enables the online provider. The integration now reads the documented `lyricsfile` format, including supplied word timestamps, explicit line endings, line-synced lyrics, and plain text. The HUD and reader can highlight those words. Alternate recordings show **WORDS**, **SYNC**, or **PLAIN**; automatic matching still checks the recording metadata. Unsupported or malformed rich data falls back to the legacy LRC/plain fields.
+
+**Import lyrics** accepts a dropped `.lrc` / `.txt` file or pasted text, previews its type, and saves it for the current track. Existing local lyrics receive a `.bak` backup. Plain text stays unsynchronized. Online access remains optional; no API key is needed for LRCLIB.
 
 ## New in 1.3 — layout fixes and a proper lyrics reader
 
@@ -66,7 +78,7 @@ LRCLIB remains the online provider. This release adds neither third-party proxy 
 
 ## New in 1.2 — an overlay that fits how you play
 
-Open **O → More...** for the new pages:
+Open **O → Advanced** for these pages:
 
 - **Smart HUD:** optionally collapse to Minimal after 2–30 seconds, expand again on a track change, and fade the whole card briefly when your character takes damage. Opening the editor or quick controls shows your full design. Damage fade detects damage, not nearby enemies.
 - **Artwork transitions:** blend between decoded covers over 650 ms. Motion and Track fade switches control this effect.
@@ -76,7 +88,7 @@ Open **O → More...** for the new pages:
 - **Correction:** save a per-recording offset up to ±30 seconds, mark a track explicit, or search and explicitly choose an alternative LRCLIB recording. The global offset adds to the saved song offset; positive values advance lyrics. Local LRC still takes priority. Reset song restores automatic matching. Only explicitly saved corrections persist, in `config/better-music-lyrics/corrections/`; no listening history is recorded.
 - **Editor:** drag the bottom-right corner to resize; snap to screen edges or centers; use Undo for up to 30 move/resize edits in the current editor session.
 - **Music ducking:** optionally lower only Minecraft's MUSIC category while the selected external player is playing, then restore its multiplier smoothly. Saved Minecraft volume settings remain untouched. Other mods manipulating the same category multiplier may conflict.
-- **Word highlighting:** local Enhanced LRC timestamps highlight supplied words as they start. Standard LRC remains line synchronized; no word timing is guessed. Disable Word highlighting to use line display everywhere.
+- **Word highlighting:** local Enhanced LRC and LRCLIB Lyricsfile timestamps highlight supplied words as they start. Standard LRC remains line synchronized; no word timing is guessed. Disable Word highlighting to use line display everywhere.
 
 Example **original** Enhanced LRC content, stored with the same `.lrc` filename as ordinary local lyrics:
 
@@ -85,7 +97,7 @@ Example **original** Enhanced LRC content, stored with the same `.lrc` filename 
 [00:13.00]<00:13.00>Stay <00:13.50>in <00:13.80>your <00:14.10>world
 ```
 
-The parser follows the inline word timestamp form documented by [QuickLRC's Enhanced LRC format guide](https://www.quicklrc.com/subtitle-formats/enhanced-lrc). Reversed timestamps and ambiguous repeated-line word stamps fall back to line display. Online lookup currently consumes LRCLIB's synchronized LRC field; it does not consume its separate YAML lyricsfile format.
+The local parser follows the inline word timestamp form documented by [QuickLRC's Enhanced LRC format guide](https://www.quicklrc.com/subtitle-formats/enhanced-lrc). Reversed timestamps and ambiguous repeated-line word stamps fall back to line display. Online lookup also reads [Lyricsfile 1.0](https://github.com/tranxuanthang/lyricsfile/blob/main/SPECIFICATION.md). Unknown versions fall back to legacy fields. The draft's unresolved `offset_ms` field is ignored; your explicit global and per-song offsets still apply.
 
 ## New in 1.1 — give your soundtrack an identity
 
@@ -104,7 +116,7 @@ Click the timeline in the studio preview or **M** controls to seek, if the curre
 
 1. Install **Fabric Loader 0.19.5 or newer** for your Minecraft version.
 2. Install the matching **Fabric API** from https://modrinth.com/mod/fabric-api.
-3. Download **one** matching `better-music-overlay-<minecraft>-1.3.0.jar` from [GitHub Releases](https://github.com/LootingVI/BetterMusicOverlay/releases/latest) and copy it into your instance's `mods` folder. Remove the previous Better Music JAR when upgrading. Local builds are packaged under `dist/1.3.0/`.
+3. Download **one** matching `better-music-overlay-<minecraft>-1.4.0.jar` from [GitHub Releases](https://github.com/LootingVI/BetterMusicOverlay/releases/latest) and copy it into your instance's `mods` folder. Remove the previous Better Music JAR when upgrading. Local builds are packaged under `dist/1.4.0/`.
 4. Start music in a desktop app or browser and launch Minecraft.
 
 Separate builds are provided for **1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, and 26.3**. Future 26.x releases are not automatically compatible. Minecraft 1.21.11 needs Java 21 or newer; the 26.x builds need Java 25 or newer.
@@ -123,7 +135,7 @@ Separate builds are provided for **1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, and 26.3
 
 Music Studio provides Studio, Aurora, Compact, and Minimal layouts; Midnight, Matcha, Rose, Paper, and Ocean themes; custom hex colors; opacity; corner radius; width; scale; relative screen position; artwork; progress; scrolling titles; and automatic hiding when no track is available.
 
-The card uses bundled **Inter** typography and antialiased, resolution-aware rendering, rather than Minecraft's bitmap font. Drawing is prepared off the render thread, capped at 30 updates/second with motion on or 10 with motion off. Album artwork is decoded off-thread with size limits. The animated title is decorative and is not an audio spectrum analyzer.
+The card uses bundled **Inter** typography and antialiased, resolution-aware rendering. Drawing is prepared off the render thread and capped by your Rendering preset: 30, 20, or 10 updates/second. With Motion off, change checks run at most five times/second and identical cards skip painting. Album artwork is decoded off-thread with size limits. The animated title is decorative and is not an audio spectrum analyzer.
 
 Settings are saved in `config/better-music-overlay.json`. Invalid numeric settings are clamped to safe values. The optional preferred-app field matches part of the Windows app ID, for example `spotify`, `apple`, or `chrome`. Leave it empty for automatic selection. If the selected app is absent, the overlay remains idle instead of controlling another app.
 
@@ -131,8 +143,8 @@ Settings are saved in `config/better-music-overlay.json`. Invalid numeric settin
 
 Open **O → Lyrics** and enable **Show lyrics**. Choose one to three lines and adjust the timing by up to ten seconds; a positive adjustment advances the displayed line.
 
-- **Local:** click **Open local LRC folder**. Use **Copy LRC filename** to get the current track's expected filename, put a UTF-8 `.lrc` file there, then open the lyrics reader and click **Reload lyrics**. Files belong in `config/better-music-lyrics/`. Local files take priority.
-- **Online:** enable **Online lookup** to retrieve synchronized lyrics from [LRCLIB](https://lrclib.net/docs). This sends the current title, artist, available album, and duration to LRCLIB. It is off by default. Results are cached only in memory for the current game session.
+- **Local:** click **Import lyrics**, drop a UTF-8 `.lrc` / `.txt` file or paste its contents, then click **Save lyrics**. You can also open the local folder from that screen and use **Copy LRC filename** in the Lyrics tab. Files belong in `config/better-music-lyrics/`. Local files take priority.
+- **Online:** enable **LRCLIB lookup** to retrieve lyrics from [LRCLIB](https://lrclib.net/docs). This sends the current title, artist, available album, and duration to LRCLIB. It is off by default. Results are cached only in memory for the current game session. Word timing depends on the selected recording's data.
 - Missing, instrumental, offline, and unsynchronized results show an honest status; the mod never invents lyric timing. Windows media sessions themselves do not provide the lyrics.
 
 An example local file:
@@ -149,20 +161,20 @@ The parser supports repeated timestamps, fractional seconds, blank instrumental 
 
 ### Lyrics sources and matching
 
-Primary-source documentation checked on 2026-10-09:
+Primary-source documentation checked on 2026-10-11:
 
-- [LRCLIB official API](https://lrclib.net/docs): selected for this release. Provides synchronized LRC, an exact lookup, and search without a required API key. Its documented duration tolerance is two seconds. Community contributions mean coverage and correctness vary; API accessibility is not a guarantee of publisher licensing for every record.
+- [LRCLIB official API](https://lrclib.net/docs): selected for this release. Provides line-synced LRC, plain text, and rich Lyricsfile data with word timing where available. Lookup requires title and artist; album and duration improve precision. No API key is required. Coverage and correctness vary by recording.
 - [Musixmatch official API collection](https://www.postman.com/musixmatch-dev/musixmatch-apis/collection/pqm8o6w/lyrics-api): requires an API key. Consider a separate provider integration once access and applicable display terms are arranged. No private application tokens or unofficial endpoints are used here.
 - [LyricFind Lyric Display](https://www.lyricfind.com/products/lyric-display): offers line- and word-synchronized display through its partner offering. Not integrated without an access arrangement.
 - [lyrics.ovh project documentation](https://github.com/NTag/lyrics.ovh): documents plain-text output and aggregation from lyrics websites. It does not document synchronized timestamps, so it is not used as an automatic timing fallback.
 
 Local LRC takes priority. Online lookup checks title, artist, album when known, and duration within two seconds. After an unsuccessful exact match, search is accepted only with a known duration and the same checks. Live/remix/acoustic qualifiers are retained. This intentionally rejects ambiguous results rather than displaying an unrelated recording. Apple Music's appended album is removed from the artist only when it matches independently supplied album metadata.
 
-The card labels the source; **Lyrics → View lyrics source** opens the actual LRCLIB record when available. Failed lookups, instrumental tracks, and unsynchronized records have distinct states. Requests have body-size limits and timeouts; stale requests are cancelled on track changes. Server errors get one bounded retry, and HTTP 429 responses set a cooldown. No timing is synthesized from plain lyrics.
+The card labels the source; **Lyrics → View lyrics source** opens the actual LRCLIB record when available. Requests identify this project, run sequentially with a 250 ms gap, and check HTTP status and content type before decoding JSON. HTTP 429 and 503 respect `Retry-After`, including waits longer than five minutes. Brief overloads get one retry; long cooldowns return immediately to keep the lyric worker responsive. Rich YAML uses a safe parser with size, depth, alias, and duplicate-key restrictions. No timing is synthesized from plain lyrics.
 
 ## Build and verification
 
-Release 1.3.0 was verified on 2026-10-11: 37 automated test cases passed on each of the six Minecraft targets (222 passes, zero failures). The opt-in network test is skipped in regular builds and also passed separately against LRCLIB. Development clients for 1.21.11 and 26.3 verified actual layout-button clicks, the selected HUD after the collapse deadline, lyric-reader timing buttons, and compact screen layouts. These checks used original example lyrics. The release JARs were checked for the correct Minecraft metadata, bundled font and native helper, exclusion of the smoke harness, and matching SHA-256 checksums.
+Release 1.4.0 was verified on 2026-10-11: 53 automated test cases passed on each of the six Minecraft targets (318 passes, zero failures). The opt-in network test and benchmark are skipped in regular builds; both passed separately. The live LRCLIB check exercised lookup, alternate-recording search, saved recording selection, and disabling online access. Word-sync parsing uses original deterministic fixtures. Development clients for 1.21.11 and 26.3 verified layout-button clicks, the selected HUD after the collapse deadline, lyric-reader timing buttons, file-drop import and saving, rendering presets, and compact screen layouts. The release JARs were checked for their Minecraft metadata, bundled font, native helper and YAML parser, exclusion of the smoke harness, and SHA-256 checksums.
 
 Use a **JDK 25** installation to build all targets:
 
@@ -197,6 +209,6 @@ Never distribute artifacts built with `-Psmoke`. Use a normal `clean build` for 
 - If Windows PowerShell or WinRT access is restricted on your machine, the studio reports the bridge failure. Diagnostics are stored in `.better-music/bridge.log` within the game instance.
 - No genuine background blur is claimed: the reference appearance uses a translucent purple gradient. Low-resolution artwork supplied by an app cannot be made detailed by the renderer.
 
-Code: MIT. Inter: SIL Open Font License, included at `src/main/resources/assets/bettermusic/font/ofl.txt`.
+Code: MIT. Inter: SIL Open Font License, included at `src/main/resources/assets/bettermusic/font/ofl.txt`. The bundled SnakeYAML 2.7 parser uses Apache License 2.0; its license is included at `META-INF/licenses/SnakeYAML-LICENSE.txt` inside each release JAR.
 
 Artwork provenance and the cover-generation prompt are documented in [Artwork notes](docs/branding/ARTWORK.md). This is an independent project, not an official Minecraft, Spotify, or Apple product.

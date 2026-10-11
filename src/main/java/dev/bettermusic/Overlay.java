@@ -16,6 +16,8 @@ public final class Overlay {
     private static final ExecutorService PAINTER=Executors.newSingleThreadExecutor(r->{var t=new Thread(r,"BetterMusic-render");t.setDaemon(true);return t;});
     private record Frame(int width,int height,int[] pixels,long generation) { }
     private static final java.util.concurrent.atomic.AtomicReference<Frame> pending=new java.util.concurrent.atomic.AtomicReference<>();
+    private static final java.util.concurrent.atomic.AtomicReference<int[]> recycled=new java.util.concurrent.atomic.AtomicReference<>();
+    private static java.awt.image.BufferedImage canvas;
     private static volatile boolean busy,closed;
     private static DynamicTexture texture;
     private static long lastPaint;
@@ -24,7 +26,10 @@ public final class Overlay {
     private static String lastLyric="";
     private static long lyricStarted;
     private static int textureWidth,textureHeight;
-    private static String renderIdentity="";
+    private record Identity(String source,String title,String artist,HudPainter.Style style,double density,boolean privateLyrics){}
+    private static Identity renderIdentity;
+    private record StillFrame(double position,double duration,boolean playing,List<String> lines,String words,String attribution,Object cover,int alpha){}
+    private static StillFrame lastStill;
     private static volatile long renderGeneration;
     private Overlay() { }
     public static Settings displaySettings(Settings settings){
@@ -52,15 +57,15 @@ public final class Overlay {
         if(closed)return;
         long now=System.nanoTime();
         var style=HudPainter.Style.from(s);
-        double density=Math.max(1,Math.min(6,Minecraft.getInstance().getWindow().getGuiScale()*scale));
-        String identity=original.source()+"\n"+track.title()+"\n"+track.artist()+"\n"+s.streamer+":"+s.hideTitles+":"+s.hideLyrics+":"+style+":"+density+":"+BetterMusic.lyrics.correction().explicit();
+        double density=RenderBudget.density(s.renderQuality,Minecraft.getInstance().getWindow().getGuiScale()*scale);
+        var identity=new Identity(original.source(),track.title(),track.artist(),style,density,s.streamer&&BetterMusic.lyrics.correction().explicit());
         if(!identity.equals(renderIdentity)){
-            renderIdentity=identity;renderGeneration++;pending.set(null);lastPaint=0;
+            renderIdentity=identity;renderGeneration++;Frame obsolete=pending.getAndSet(null);if(obsolete!=null)recycled.set(obsolete.pixels());lastPaint=0;lastStill=null;
             if(texture!=null){Minecraft.getInstance().getTextureManager().release(PANEL);texture=null;}
         }
         if(!lastTitle.equals(track.title())){lastTitle=track.title();titleStarted=now;}
-        if(!busy&&now-lastPaint>(s.animation?33_000_000L:100_000_000L)) {
-            busy=true;lastPaint=now;
+        if(!busy&&now-lastPaint>RenderBudget.interval(s.renderQuality,s.animation)) {
+            lastPaint=now;
             List<String> lines=original.source().equals("PREVIEW")?List.of("Your lyrics, right here.","Stay in your world.","Find your own frequency."):BetterMusic.lyrics.visible(original,s);
             String words=s.wordHighlight?BetterMusic.lyrics.highlighted(original,s):"";
             String current=lines.isEmpty()?"":lines.get(0);
@@ -68,22 +73,28 @@ public final class Overlay {
             double animationTime=(now-titleStarted)/1e9;
             double lyricTime=(now-lyricStarted)/1e9;
             String lyricSource=track.source().equals("PREVIEW")?"DEMO LYRICS":BetterMusic.lyrics.attribution();
+            var still=new StillFrame(Math.floor(track.elapsed()),track.duration(),track.playing(),lines,words,lyricSource,s.artwork?BetterMusic.art.bitmap():null,(int)(alpha*255));
+            if(s.animation||!still.equals(lastStill)||texture==null){
+            lastStill=still;busy=true;
             long generation=renderGeneration;
             PAINTER.execute(()->{
                 try {
                     var art=track.source().equals("PREVIEW")||!s.artwork?null:BetterMusic.art.blended(s.animation&&s.transitions);
-                    var image=HudPainter.paint(style,track,art,lines,density,animationTime,lyricTime,lyricSource,words);
-                    int[] pixels=image.getRGB(0,0,image.getWidth(),image.getHeight(),null,0,image.getWidth());
-                    if(alpha<.999f)for(int i=0;i<pixels.length;i++)pixels[i]=(pixels[i]&0xffffff)|((int)((pixels[i]>>>24)*alpha)<<24);
-                    if(generation==renderGeneration)pending.set(new Frame(image.getWidth(),image.getHeight(),pixels,generation));
+                    var image=canvas=HudPainter.paintInto(canvas,style,track,art,lines,density,animationTime,lyricTime,lyricSource,words);
+                    int[] pixels=recycled.getAndSet(null);if(pixels==null||pixels.length!=image.getWidth()*image.getHeight())pixels=new int[image.getWidth()*image.getHeight()];
+                    image.getRGB(0,0,image.getWidth(),image.getHeight(),pixels,0,image.getWidth());
+                    RenderBudget.toAbgr(pixels,alpha);
+                    if(generation==renderGeneration){Frame replaced=pending.getAndSet(new Frame(image.getWidth(),image.getHeight(),pixels,generation));if(replaced!=null)recycled.set(replaced.pixels());}else recycled.set(pixels);
                 }catch(Exception e){BetterMusic.LOG.debug("Cannot render music card",e);}finally{busy=false;}
             });
+            }
         }
         Frame frame=pending.getAndSet(null);
         if(frame!=null&&frame.generation()==renderGeneration) {
             boolean recreate=texture==null||frame.width()!=textureWidth||frame.height()!=textureHeight;
             NativeImage pixels=recreate?new NativeImage(frame.width(),frame.height(),false):texture.getPixels();
-            for(int py=0;py<frame.height();py++)for(int px=0;px<frame.width();px++)pixels.setPixel(px,py,frame.pixels()[py*frame.width()+px]);
+            org.lwjgl.system.MemoryUtil.memIntBuffer(pixels.getPointer(),frame.pixels().length).put(frame.pixels());
+            recycled.set(frame.pixels());
             if(recreate){texture=new DynamicTexture(()->"Better Music antialiased card",pixels);Minecraft.getInstance().getTextureManager().register(PANEL,texture);textureWidth=frame.width();textureHeight=frame.height();}
             else texture.upload();
         }
@@ -105,12 +116,15 @@ public final class Overlay {
         if(Math.abs(localX-(s.width-23))<13){BetterMusic.media.command("next");return true;}
         return false;
     }
-    public static void close(){closed=true;PAINTER.shutdownNow();Minecraft.getInstance().getTextureManager().release(PANEL);}
-    public static Component smoothText(String text){return Component.literal(text).withStyle(style->style.withFont(new FontDescription.Resource(Identifier.fromNamespaceAndPath("bettermusic","ui"))));}
+    public static void close(){closed=true;PAINTER.shutdownNow();Minecraft.getInstance().getTextureManager().release(PANEL);UiSkin.close();}
+    private static final java.util.Map<String,Component> textCache=new java.util.LinkedHashMap<>(256,.75f,true){@Override protected boolean removeEldestEntry(java.util.Map.Entry<String,Component> entry){return size()>512;}};
+    private static final FontDescription UI_FONT=new FontDescription.Resource(Identifier.fromNamespaceAndPath("bettermusic","ui"));
+    public static Component smoothText(String text){return textCache.computeIfAbsent(text,value->Component.literal(value).withStyle(style->style.withFont(UI_FONT)));}
     public static void text(GuiGraphics g,String text,int x,int y,int color){g.drawString(Minecraft.getInstance().font,smoothText(text),x,y,color,false);}
-    public static String fit(String text,int width){var font=Minecraft.getInstance().font;if(font.width(smoothText(text))<=width)return text;while(!text.isEmpty()&&font.width(smoothText(text+"…"))>width)text=text.substring(0,text.offsetByCodePoints(text.length(),-1));return text+"…";}
+    private record Fit(String text,int width){}
+    private static final java.util.Map<Fit,String> fitCache=new java.util.LinkedHashMap<>(256,.75f,true){@Override protected boolean removeEldestEntry(java.util.Map.Entry<Fit,String> entry){return size()>512;}};
+    public static String fit(String text,int width){return fitCache.computeIfAbsent(new Fit(text,width),key->{var font=Minecraft.getInstance().font;if(font.width(smoothText(text))<=width)return text;int low=0,high=text.codePointCount(0,text.length());while(low<high){int mid=(low+high+1)/2;String part=text.substring(0,text.offsetByCodePoints(0,mid))+"…";if(font.width(smoothText(part))<=width)low=mid;else high=mid-1;}return text.substring(0,text.offsetByCodePoints(0,low))+"…";});}
     public static void round(GuiGraphics g,int x,int y,int w,int h,int r,int color) {
-        if(w<=0||h<=0)return;r=Math.max(0,Math.min(r,Math.min(w,h)/2));
-        for(int row=0;row<h;row++){int d=row<r?r-row-1:row>=h-r?row-(h-r):0;int inset=d==0?0:(int)Math.ceil(r-Math.sqrt(r*r-d*d));g.fill(x+inset,y+row,x+w-inset,y+row+1,color);}
+        UiSkin.rounded(g,x,y,w,h,r,color);
     }
 }
