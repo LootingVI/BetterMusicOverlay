@@ -15,15 +15,16 @@ class LyricsMatchTest {
         assertFalse(LyricsMatch.matches(record("Track (Live)",200),track("Track",200),true));
         assertFalse(LyricsMatch.matches(record("Track",200),track("Track (Remix)",200),true));
     }
-    @Test void rejectsWrongArtistAlbumAndUnknownSearchDuration(){
+    @Test void checksArtistButAllowsAlbumEditionsAndMissingPlayerDuration(){
         var j=record("Track",200);j.addProperty("artistName","Other Artist");assertFalse(LyricsMatch.matches(j,track("Track",200),true));
-        j=record("Track",200);j.addProperty("albumName","Different Edition");assertFalse(LyricsMatch.matches(j,track("Track",200),true));
-        assertFalse(LyricsMatch.matches(record("Track",200),track("Track",0),true));
+        j=record("Track",200);j.addProperty("albumName","Different Edition");assertTrue(LyricsMatch.matches(j,track("Track",200),true));
+        assertTrue(LyricsMatch.matches(record("Track",200),track("Track",0),true));
         assertTrue(LyricsMatch.matches(record("Track",200),track("Track",0),false));
     }
     @Test void appleAlbumSuffixOnlyRemovedWhenIndependentlyConfirmed(){
         var t=new Track("Track","Artist — Album","AppleMusic",false,0,200,"",0,"Album");assertEquals("Artist",LyricsMatch.artist(t));
         var artist=new Track("Track","Artist — Alias","AppleMusic",false,0,200,"",0,"Album");assertEquals("Artist — Alias",LyricsMatch.artist(artist));
+        var single=new Track("Track","Artist — Album","AppleMusic",false,0,200,"",0,"Album - Single");assertEquals("Artist",LyricsMatch.artist(single));
     }
     @Test void choosesClosestSyncedRecordingWithoutDiscardingQualifiers(){
         var list=new JsonArray();list.add(record("Track (Live)",200));list.add(record("Track",202));list.add(record("Track",200.5));

@@ -42,6 +42,12 @@ The cards below are rendered by the mod with original example track text. The re
 
 </details>
 
+## Fixed in 1.4.1 — lyrics hidden by album metadata differences
+
+Apple Music can label an album with `- Single` or `- EP`, while LRCLIB stores the matching recording under another album spelling. The old lookup rejected those differences and repeated the album filter in its fallback search. For example, this hid the existing synchronized entry for **GERÄT (bitte cancelt mich 2)** by **Zensery**.
+
+Fallback search now uses title and artist; album names help rank results instead of rejecting them. The title, artist, recording qualifiers, and available duration still have to match. Confirmed album text appended to the artist also tolerates the Single/EP suffix. If the player omits duration, the mod can accept a consistent set of matching results; conflicting recording lengths require **Find recording**. An unsuccessful automatic match now points to that action instead of suggesting that no lyrics exist.
+
 ## New in 1.4 — a redesigned studio and richer LRCLIB support
 
 The studio now has sidebar navigation, rounded controls, switches, a dedicated live preview, and a compact layout for smaller windows. Advanced settings and the lyrics reader share the same visual style. **O → Advanced → Rendering** offers **Quality (30 fps)**, **Balanced (20 fps, default)**, and **Saver (10 fps)** limits for the overlay renderer. These limits do not change Minecraft's frame limit. With Motion off, unchanged cards skip painting.
@@ -116,7 +122,7 @@ Click the timeline in the studio preview or **M** controls to seek, if the curre
 
 1. Install **Fabric Loader 0.19.5 or newer** for your Minecraft version.
 2. Install the matching **Fabric API** from https://modrinth.com/mod/fabric-api.
-3. Download **one** matching `better-music-overlay-<minecraft>-1.4.0.jar` from [GitHub Releases](https://github.com/LootingVI/BetterMusicOverlay/releases/latest) and copy it into your instance's `mods` folder. Remove the previous Better Music JAR when upgrading. Local builds are packaged under `dist/1.4.0/`.
+3. Download **one** matching `better-music-overlay-<minecraft>-1.4.1.jar` from [GitHub Releases](https://github.com/LootingVI/BetterMusicOverlay/releases/latest) and copy it into your instance's `mods` folder. Remove the previous Better Music JAR when upgrading. Local builds are packaged under `dist/1.4.1/`.
 4. Start music in a desktop app or browser and launch Minecraft.
 
 Separate builds are provided for **1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, and 26.3**. Future 26.x releases are not automatically compatible. Minecraft 1.21.11 needs Java 21 or newer; the 26.x builds need Java 25 or newer.
@@ -168,11 +174,13 @@ Primary-source documentation checked on 2026-10-11:
 - [LyricFind Lyric Display](https://www.lyricfind.com/products/lyric-display): offers line- and word-synchronized display through its partner offering. Not integrated without an access arrangement.
 - [lyrics.ovh project documentation](https://github.com/NTag/lyrics.ovh): documents plain-text output and aggregation from lyrics websites. It does not document synchronized timestamps, so it is not used as an automatic timing fallback.
 
-Local LRC takes priority. Online lookup checks title, artist, album when known, and duration within two seconds. After an unsuccessful exact match, search is accepted only with a known duration and the same checks. Live/remix/acoustic qualifiers are retained. This intentionally rejects ambiguous results rather than displaying an unrelated recording. Apple Music's appended album is removed from the artist only when it matches independently supplied album metadata.
+Local LRC takes priority. Online lookup checks title, artist, and available duration within two seconds. Album spelling is a ranking preference; fallback search does not filter by album. Live/remix/acoustic qualifiers are retained. Without a player duration, search first prefers a matching album when available and accepts only results whose durations span no more than two seconds. Otherwise, choose the recording manually. Apple Music's appended album is removed from the artist only when it matches independently supplied album metadata, allowing Single/EP suffix differences.
 
 The card labels the source; **Lyrics → View lyrics source** opens the actual LRCLIB record when available. Requests identify this project, run sequentially with a 250 ms gap, and check HTTP status and content type before decoding JSON. HTTP 429 and 503 respect `Retry-After`, including waits longer than five minutes. Brief overloads get one retry; long cooldowns return immediately to keep the lyric worker responsive. Rich YAML uses a safe parser with size, depth, alias, and duplicate-key restrictions. No timing is synthesized from plain lyrics.
 
 ## Build and verification
+
+Release 1.4.1 was verified on 2026-10-12: 58 tests passed on each target (348 passes, zero failures). Two optional live LRCLIB tests passed separately, including the reported Zensery case using Apple Music's public title/album metadata. Deterministic regressions cover album edition differences, missing duration, ambiguous recording lengths, and rejection of incorrect artists or versions. The six packaged JARs passed metadata, dependency, smoke-harness exclusion, and checksum checks. This fix changes lookup logic; the in-game UI checks below were performed for 1.4.0.
 
 Release 1.4.0 was verified on 2026-10-11: 53 automated test cases passed on each of the six Minecraft targets (318 passes, zero failures). The opt-in network test and benchmark are skipped in regular builds; both passed separately. The live LRCLIB check exercised lookup, alternate-recording search, saved recording selection, and disabling online access. Word-sync parsing uses original deterministic fixtures. Development clients for 1.21.11 and 26.3 verified layout-button clicks, the selected HUD after the collapse deadline, lyric-reader timing buttons, file-drop import and saving, rendering presets, and compact screen layouts. The release JARs were checked for their Minecraft metadata, bundled font, native helper and YAML parser, exclusion of the smoke harness, and SHA-256 checksums.
 

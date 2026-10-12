@@ -10,6 +10,18 @@ import static org.junit.jupiter.api.Assertions.*;
 class LyricsLiveTest {
     @TempDir Path directory;
     @Test @EnabledIfEnvironmentVariable(named="BETTERMUSIC_LIVE_LYRICS",matches="1")
+    void appleMusicSingleAlbumFindsZenseryRecording()throws Exception{
+        var settings=new Settings();settings.lyrics=true;settings.onlineLyrics=true;
+        var track=LyricsDiscoveryTest.appleTrack(133);
+        try(var service=new LyricsService(directory)){
+            service.update(track,settings);long deadline=System.nanoTime()+25_000_000_000L;
+            while(service.status().equals("Looking for lyrics ...")&&System.nanoTime()<deadline)Thread.sleep(50);
+            assertFalse(service.transcript(track,settings).lines().isEmpty(),service.status());
+            assertTrue(service.sourceUrl().matches("https://lrclib.net/api/get/\\d+"));
+            System.out.println("APPLE METADATA LOOKUP: "+service.sourceUrl()+" / "+service.attribution());
+        }
+    }
+    @Test @EnabledIfEnvironmentVariable(named="BETTERMUSIC_LIVE_LYRICS",matches="1")
     void officialProviderReturnsAttributedSynchronizedLyrics() throws Exception {
         var settings=new Settings();settings.lyrics=true;settings.onlineLyrics=true;
         var track=new Track("Never Gonna Give You Up","Rick Astley","TEST",false,20,214,"",System.nanoTime(),"Whenever You Need Somebody");

@@ -129,19 +129,19 @@ public final class LyricsService implements AutoCloseable {
             Cached saved=cache.get(id);
             if(saved!=null&&saved.expires()>System.nanoTime()){finish(ticket,saved.result());return;}
             String query="track_name="+enc(track.title())+"&artist_name="+enc(LyricsMatch.artist(track));
-            if(!track.album().isBlank())query+="&album_name="+enc(track.album());
             String exact=query;
+            if(!track.album().isBlank())exact+="&album_name="+enc(track.album());
             if(track.duration()>=1&&track.duration()<=3600)exact+="&duration="+track.duration();
             JsonElement response=request("get?"+exact,ticket);
             JsonObject chosen=response!=null&&response.isJsonObject()&&LyricsMatch.matches(response.getAsJsonObject(),track,false)?response.getAsJsonObject():null;
             boolean instrumental=chosen!=null&&chosen.has("instrumental")&&chosen.get("instrumental").getAsBoolean();
-            if(!instrumental&&(chosen==null||LyricsMatch.string(chosen,"syncedLyrics").isBlank()&&Lyricsfile.parse(LyricsMatch.string(chosen,"lyricsfile")).lines().isEmpty())&&track.duration()>0){
+            if(!instrumental&&(chosen==null||LyricsMatch.string(chosen,"syncedLyrics").isBlank()&&Lyricsfile.parse(LyricsMatch.string(chosen,"lyricsfile")).lines().isEmpty())){
                 try{JsonElement search=request("search?"+query,ticket);
                     if(search!=null&&search.isJsonArray()){JsonObject alternative=LyricsMatch.best(search.getAsJsonArray(),track);if(alternative!=null)chosen=alternative;}
                 }catch(InterruptedException e){throw e;}catch(Exception e){if(chosen==null)throw e;}
             }
             Result loaded;
-            if(chosen==null)loaded=Result.status("No matching lyrics found");
+            if(chosen==null)loaded=Result.status("No safe automatic match · use Find recording");
             else loaded=record(chosen,false);
             check(ticket);
             synchronized(cache){if(cache.size()>=30)cache.remove(cache.keySet().iterator().next());cache.put(id,new Cached(loaded,System.nanoTime()+(loaded.lines().isEmpty()?60_000_000_000L:1_800_000_000_000L)));}

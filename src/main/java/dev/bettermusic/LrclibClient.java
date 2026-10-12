@@ -11,7 +11,7 @@ import java.util.function.LongSupplier;
 
 /** Sequential, bounded requests. Cooldowns survive reloads and track changes. */
 final class LrclibClient {
-    static final String USER_AGENT="BetterMusicOverlay/1.4.0 (https://github.com/LootingVI/BetterMusicOverlay)";
+    static final String USER_AGENT="BetterMusicOverlay/1.4.1 (https://github.com/LootingVI/BetterMusicOverlay)";
     record Reply(int status,String type,String retryAfter,String body){}
     @FunctionalInterface interface Transport {Reply send(HttpRequest request)throws Exception;}
     @FunctionalInterface interface Pause {void sleep(long millis)throws InterruptedException;}
