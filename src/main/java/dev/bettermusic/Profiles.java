@@ -7,7 +7,7 @@ import java.util.*;
 /** Share appearance only. Never import network consent, media selection or privacy controls. */
 public final class Profiles {
     private static final Gson JSON=new GsonBuilder().setPrettyPrinting().create();
-    private static final Set<String> FIELDS=Set.of("x","y","scale","opacity","width","radius","accent","background","foreground","artwork","progress","animation","provider","lyrics","lyricsLines","adaptiveColor","ambient","vinyl","transitions","lyricFocus","layout","theme","smartHud","combatFade","expandSeconds","wordHighlight","snap");
+    private static final Set<String> FIELDS=Set.of("x","y","scale","opacity","width","radius","accent","background","foreground","artwork","progress","animation","provider","lyrics","lyricsLines","adaptiveColor","ambient","vinyl","transitions","lyricFocus","layout","theme","smartHud","combatFade","expandSeconds","wordHighlight","snap","lyricMotion","ambientMotion","artworkOrbit","motionIntensity");
     public static String exportTheme(Settings s){
         JsonObject full=JSON.toJsonTree(s).getAsJsonObject(),visual=new JsonObject();
         for(String key:FIELDS)visual.add(key,full.get(key));

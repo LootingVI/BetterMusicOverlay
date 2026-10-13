@@ -10,8 +10,9 @@ public final class HudPainter {
     private static final Font INTER=loadFont();
     public record Style(int width,int radius,int accent,int background,int foreground,double opacity,String layout,
                         boolean artwork,boolean progress,boolean motion,boolean provider,boolean lyrics,int lyricLines,
-                        boolean adaptive,boolean ambient,boolean vinyl,boolean transitions,boolean lyricFocus) {
-        public static Style from(Settings s){return new Style(s.width,s.radius,s.accent,s.background,s.foreground,s.opacity,s.layout,s.artwork,s.progress,s.animation,s.provider,s.lyrics,s.lyricsLines,s.adaptiveColor,s.ambient,s.vinyl,s.transitions,s.lyricFocus);}
+                        boolean adaptive,boolean ambient,boolean vinyl,boolean transitions,boolean lyricFocus,
+                        String lyricMotion,boolean ambientMotion,boolean artworkOrbit,double intensity) {
+        public static Style from(Settings s){return new Style(s.width,s.radius,s.accent,s.background,s.foreground,s.opacity,s.layout,s.artwork,s.progress,s.animation,s.provider,s.lyrics,s.lyricsLines,s.adaptiveColor,s.ambient,s.vinyl,s.transitions,s.lyricFocus,s.lyricMotion,s.ambientMotion,s.artworkOrbit,s.motionIntensity);}
         public int baseHeight(){return layout.equals("AURORA")?148:layout.equals("MINIMAL")?42:layout.equals("COMPACT")?66:86;}
         public int height(){return baseHeight()+(lyrics?28+lyricLines*(lyricFocus?26:21):0);}
         public int controlY(){return layout.equals("AURORA")?91:layout.equals("MINIMAL")?20:layout.equals("COMPACT")?29:30;}
@@ -28,6 +29,30 @@ public final class HudPainter {
     private record Background(int width,int height,int radius,int tint,int surface,double opacity,boolean ambient,double density){}
     private record CachedBackground(Background key,BufferedImage image){}
     private static final ThreadLocal<CachedBackground> BACKGROUND=new ThreadLocal<>();
+    private record Glow(int tint,int size,BufferedImage image){}
+    private static final ThreadLocal<Glow> GLOW=new ThreadLocal<>();
+    public record LyricFrame(List<String> previous,LyricMotion.Highlight highlight){}
+    private static BufferedImage glow(int tint,int size){
+        var saved=GLOW.get();if(saved!=null&&saved.tint()==tint&&saved.size()==size)return saved.image();
+        var image=new BufferedImage(size,size,BufferedImage.TYPE_INT_ARGB_PRE);var g=image.createGraphics();float half=size/2f;
+        g.setPaint(new RadialGradientPaint(half,half,half,new float[]{0,.4f,1},new Color[]{color(tint,100),color(tint,45),color(tint,0)}));g.fillRect(0,0,size,size);g.dispose();GLOW.set(new Glow(tint,size,image));return image;
+    }
+    private static void drift(Graphics2D g,Style s,Track track,int tint,double density){
+        if(!s.motion()||!s.ambient()||!s.ambientMotion()||!track.present())return;
+        Composite original=g.getComposite();g.setComposite(AlphaComposite.SrcOver.derive((float)(s.opacity()*s.intensity()*.65)));
+        double phase=track.elapsed()*.16;int size=(int)Math.ceil(s.width()*density);var light=glow(tint,size);
+        // Blit at physical resolution: avoid a bicubic resample of a large translucent image each frame.
+        var transform=g.getTransform();g.scale(1/density,1/density);
+        g.drawImage(light,(int)(s.width()*density*(.3+.22*Math.sin(phase)))-size/2,(int)(s.height()*density*(.2+.25*Math.cos(phase*.7)))-size/2,null);
+        g.drawImage(light,(int)(s.width()*density*(.8+.12*Math.cos(phase*.8)))-size/2,(int)(s.height()*density)-size/3,null);g.setTransform(transform);g.setComposite(original);
+    }
+    private static void halo(Graphics2D g,Style s,Track track,Color accent,double x,double y,double size,boolean round){
+        if(!s.motion()||!s.artworkOrbit()||!track.present())return;
+        Shape shape=round?new Ellipse2D.Double(x,y,size,size):new RoundRectangle2D.Double(x,y,size,size,size*.24,size*.24);
+        Stroke stroke=g.getStroke();double phase=track.elapsed()*.45,cx=x+size/2,cy=y+size/2,dx=Math.cos(phase)*size/2,dy=Math.sin(phase)*size/2;
+        g.setColor(color(accent.getRGB(),(int)(22*s.intensity())));g.setStroke(new BasicStroke(5));g.draw(shape);
+        g.setPaint(new GradientPaint((float)(cx-dx),(float)(cy-dy),color(accent.getRGB(),5),(float)(cx+dx),(float)(cy+dy),color(accent.getRGB(),(int)(190*s.intensity()))));g.setStroke(new BasicStroke(1.5f));g.draw(shape);g.setStroke(stroke);
+    }
     private static BufferedImage background(Style s,double density,int tint){
         var key=new Background(s.width(),s.height(),s.radius(),tint,s.background(),s.opacity(),s.ambient(),density);var cached=BACKGROUND.get();
         if(cached!=null&&cached.key().equals(key))return cached.image();
@@ -59,6 +84,9 @@ public final class HudPainter {
     }
     /** The worker owns this reusable surface; callers must not read it while another paint is running. */
     public static BufferedImage paintInto(BufferedImage reuse,Style s,Track t,BufferedImage cover,List<String> lyrics,double density,double clock,double lyricClock,String lyricSource,String words) {
+        return paintInto(reuse,s,t,cover,lyrics,density,clock,lyricClock,lyricSource,new LyricFrame(List.of(),new LyricMotion.Highlight(words,"",1)));
+    }
+    public static BufferedImage paintInto(BufferedImage reuse,Style s,Track t,BufferedImage cover,List<String> lyrics,double density,double clock,double lyricClock,String lyricSource,LyricFrame frame) {
         int w=s.width(),h=s.height();
         int pw=(int)Math.ceil(w*density),ph=(int)Math.ceil(h*density);
         var image=reuse!=null&&reuse.getWidth()==pw&&reuse.getHeight()==ph?reuse:new BufferedImage(pw,ph,BufferedImage.TYPE_INT_ARGB);
@@ -72,16 +100,18 @@ public final class HudPainter {
         int tint=s.adaptive()?palette(cover,s.accent()):s.accent();
         Color surface=color(s.background(),(int)(255*s.opacity()));
         g.drawImage(background(s,density,tint),0,0,w,h,null);
+        drift(g,s,t,tint,density);
         Color fg=color(s.foreground(),255),muted=blend(fg,surface,.40),accent=color(tint,255);
         if(s.transitions()&&s.motion())g.setComposite(AlphaComposite.SrcOver.derive((float)(.35+.65*Math.min(1,Math.max(0,clock)/.35))));
         if(s.layout().equals("AURORA")) {
             aurora(g,s,t,cover,clock,fg,muted,accent,surface);
-            lyrics(g,s,lyrics,fg,muted,accent,lyricClock,lyricSource,words);
+            lyrics(g,s,lyrics,fg,muted,accent,lyricClock,lyricSource,frame);
             g.dispose();return image;
         }
         boolean minimal=s.layout().equals("MINIMAL"),compact=s.layout().equals("COMPACT");
         int tx=12,coverSize=compact?34:40;
         if(s.artwork()&&!minimal) {
+            halo(g,s,t,accent,9,9,coverSize+4,false);
             var artShape=new RoundRectangle2D.Float(11,11,coverSize,coverSize,4,4);
             Shape previous=g.getClip();g.clip(artShape);
             if(cover!=null)g.drawImage(cover,11,11,coverSize,coverSize,null);
@@ -115,17 +145,18 @@ public final class HudPainter {
             g.setColor(color(s.foreground(),42));g.fill(new RoundRectangle2D.Float(barStart,py-3,barWidth,6,6,6));
             if(t.duration()>0){g.setColor(fg);g.fill(new RoundRectangle2D.Double(barStart,py-3,barWidth*Math.min(1,t.elapsed()/t.duration()),6,6,6));}
         }
-        lyrics(g,s,lyrics,fg,muted,accent,lyricClock,lyricSource,words);
+        lyrics(g,s,lyrics,fg,muted,accent,lyricClock,lyricSource,frame);
         g.dispose();return image;
     }
     private static void aurora(Graphics2D g,Style s,Track t,BufferedImage cover,double clock,Color fg,Color muted,Color accent,Color surface) {
         int w=s.width(),tx=s.artwork()?122:18,textWidth=w-tx-18;
         if(s.artwork()) {
+            halo(g,s,t,accent,14,14,94,s.vinyl());
             Shape clip=g.getClip();Shape shape=s.vinyl()?new Ellipse2D.Double(16,16,90,90):new RoundRectangle2D.Double(16,16,90,90,18,18);
             g.clip(shape);
             g.setPaint(new GradientPaint(16,16,accent,106,106,surface));g.fill(shape);
             var transform=g.getTransform();
-            if(s.vinyl()&&s.motion()&&t.playing())g.rotate(clock*.28,61,61);
+            if(s.vinyl()&&s.motion())g.rotate(t.elapsed()*.28,61,61);
             if(cover!=null)g.drawImage(cover,16,16,90,90,null);
             else {g.setColor(new Color(0,0,0,95));g.fill(new Ellipse2D.Double(29,29,64,64));g.setColor(accent);g.fill(new Ellipse2D.Double(53,53,16,16));}
             g.setTransform(transform);
@@ -147,30 +178,43 @@ public final class HudPainter {
             int py=122,bw=w-36;double ratio=t.duration()>0?Math.min(1,t.elapsed()/t.duration()):0;
             g.setColor(new Color(fg.getRed(),fg.getGreen(),fg.getBlue(),28));g.fill(new RoundRectangle2D.Double(18,py,bw,3,3,3));
             g.setColor(accent);g.fill(new RoundRectangle2D.Double(18,py,bw*ratio,3,3,3));
-            if(t.duration()>0)g.fill(new Ellipse2D.Double(15+bw*ratio,py-1.5,6,6));
+            if(t.duration()>0){
+                if(s.motion()){double pulse=10+2*Math.sin(t.elapsed()*2);g.setColor(color(accent.getRGB(),(int)(35*s.intensity())));g.fill(new Ellipse2D.Double(18+bw*ratio-pulse/2,py+1.5-pulse/2,pulse,pulse));g.setColor(accent);}
+                g.fill(new Ellipse2D.Double(15+bw*ratio,py-1.5,6,6));
+            }
             label(g,format(t.elapsed()),18,139,45,8,false,muted,false,clock);
             label(g,t.duration()>0?"-"+format(t.duration()-t.elapsed()):"LIVE",w-51,139,36,8,false,muted,false,clock);
         }
     }
-    private static void lyrics(Graphics2D g,Style s,List<String> lines,Color fg,Color muted,Color accent,double clock,String source,String words) {
+    private static void lyrics(Graphics2D g,Style s,List<String> lines,Color fg,Color muted,Color accent,double clock,String source,LyricFrame frame) {
         if(!s.lyrics())return;
         int top=s.baseHeight(),step=s.lyricFocus()?26:21;
         g.setColor(new Color(fg.getRed(),fg.getGreen(),fg.getBlue(),22));g.draw(new Line2D.Double(16,top,s.width()-16,top));
+        boolean animate=s.motion()&&!s.lyricMotion().equals("OFF"),flow=animate&&s.lyricMotion().equals("FLOW");
+        double entry=animate?LyricMotion.ease(clock/.42):1;
+        g.setColor(color(accent.getRGB(),(int)(12+10*s.intensity())));g.fill(new RoundRectangle2D.Double(10,top+6,s.width()-20,step+3,10,10));
+        if(animate&&entry<1&&!frame.previous().isEmpty()){
+            Composite original=g.getComposite();var transform=g.getTransform();g.translate(0,flow?-10*entry*s.intensity():0);
+            g.setComposite(AlphaComposite.SrcOver.derive((float)(((AlphaComposite)original).getAlpha()*(1-entry)*.65)));
+            label(g,frame.previous().getFirst(),25,top+25,s.width()-43,s.lyricFocus()?16:13,true,muted,false,0);g.setTransform(transform);g.setComposite(original);
+        }
         for(int i=0;i<Math.min(s.lyricLines(),lines.size());i++) {
             int baseline=top+25+i*step;
-            Composite original=g.getComposite();
-            if(i==0&&s.motion()&&s.transitions())g.setComposite(AlphaComposite.SrcOver.derive((float)(.3+.7*Math.min(1,Math.max(0,clock)/.22))));
+            Composite original=g.getComposite();var transform=g.getTransform();
+            double entryPhase=animate?LyricMotion.ease((clock-i*.035)/.42):1;
+            if(animate){g.setComposite(AlphaComposite.SrcOver.derive((float)(((AlphaComposite)original).getAlpha()*(.15+.85*entryPhase))));if(flow)g.translate((1-entryPhase)*4*s.intensity(),(1-entryPhase)*10*s.intensity());}
             if(i==0){g.setColor(accent);g.fill(new RoundRectangle2D.Double(15,baseline-12,2,14,2,2));}
-            label(g,lines.get(i),25,baseline,s.width()-43,i==0?(s.lyricFocus()?16:13):11,i==0,i==0?fg:muted,s.motion()&&i==0,clock);
-            if(i==0&&!words.isEmpty()&&lines.get(i).startsWith(words)){
+            label(g,lines.get(i),25,baseline,s.width()-43,i==0?(s.lyricFocus()?16:13):11,i==0,i==0?fg:muted,animate&&i==0,clock);
+            var highlight=frame.highlight();
+            if(i==0&&!highlight.empty()&&lines.get(i).startsWith(highlight.before()+highlight.word())){
                 // Use exactly the same font and marquee origin as the full line.
                 String full=lines.get(i);int size=s.lyricFocus()?16:13,available=s.width()-43;
-                int fullWidth=g.getFontMetrics().stringWidth(full),prefixWidth=g.getFontMetrics().stringWidth(words);
-                double shift=0;if(fullWidth>available&&s.motion()){double distance=fullWidth-available+16,phase=(clock*22)%(distance*2+88);shift=phase<44?0:phase<44+distance?phase-44:phase<88+distance?distance:2*distance+88-phase;}
+                int fullWidth=g.getFontMetrics().stringWidth(full);double prefixWidth=highlight.width(value->g.getFontMetrics().stringWidth(value));
+                double shift=0;if(fullWidth>available&&animate){double distance=fullWidth-available+16,phase=(clock*22)%(distance*2+88);shift=phase<44?0:phase<44+distance?phase-44:phase<88+distance?distance:2*distance+88-phase;}
                 Shape clip=g.getClip();g.clip(new Rectangle2D.Double(25,baseline-size-3,Math.max(0,Math.min(available,prefixWidth-shift)),size+7));
-                label(g,full,25,baseline,available,size,true,accent,s.motion(),clock);g.setClip(clip);
+                label(g,full,25,baseline,available,size,true,accent,animate,clock);g.setClip(clip);
             }
-            g.setComposite(original);
+            g.setTransform(transform);g.setComposite(original);
         }
         label(g,source,25,s.height()-8,s.width()-43,7,false,muted,false,clock);
     }

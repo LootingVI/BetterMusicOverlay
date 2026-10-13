@@ -42,6 +42,18 @@ The cards below are rendered by the mod with original example track text. The re
 
 </details>
 
+## New in 1.5 — motion for your music
+
+Lyric lines now enter with a gentle slide and fade, with a focus surface behind the active line. The full reader smoothly follows playback and moves its focus marker between lines. When the source provides word timestamps, each word gets a short highlight reveal at its timestamp. Line-only and plain-text lyrics keep their original timing capabilities.
+
+Album-colored light drifts behind the card, a moving halo traces the artwork, and Aurora's progress marker glows softly. These are decorative effects, not an audio spectrum or beat detector. Playback-linked artwork effects freeze when paused; Vinyl keeps its angle instead of snapping back.
+
+Open **O → Playback → Motion settings**, or **Advanced → Motion**, to choose **Flow / Fade / Off**, set the intensity, and control ambient drift, artwork halo, word reveal, and track fades. The global **Motion** switch disables animation. Appearance profiles include the new settings; existing rendering limits still apply.
+
+![Animated renderer preview with original demo lyrics](docs/lyric-motion.gif)
+
+![Motion controls in Minecraft at a compact window size](docs/motion-settings-in-minecraft.png)
+
 ## Fixed in 1.4.2 — Apple Music on Windows sending the album inside the artist
 
 Apple Music's Windows media session can send `Artist — Album - Single` as the artist while leaving its album field empty. Earlier versions queried LRCLIB with that combined artist and rejected the correct recordings. The lookup now recovers the artist and album for this player format, including album names containing an em dash. Local lyric filenames and saved corrections keep their existing identities.
@@ -130,7 +142,7 @@ Click the timeline in the studio preview or **M** controls to seek, if the curre
 
 1. Install **Fabric Loader 0.19.5 or newer** for your Minecraft version.
 2. Install the matching **Fabric API** from https://modrinth.com/mod/fabric-api.
-3. Download **one** matching `better-music-overlay-<minecraft>-1.4.2.jar` from [GitHub Releases](https://github.com/LootingVI/BetterMusicOverlay/releases/latest) and copy it into your instance's `mods` folder. Remove the previous Better Music JAR when upgrading. Local builds are packaged under `dist/1.4.2/`.
+3. Download **one** matching `better-music-overlay-<minecraft>-1.5.0.jar` from [GitHub Releases](https://github.com/LootingVI/BetterMusicOverlay/releases/latest) and copy it into your instance's `mods` folder. Remove the previous Better Music JAR when upgrading. Local builds are packaged under `dist/1.5.0/`.
 4. Start music in a desktop app or browser and launch Minecraft.
 
 Separate builds are provided for **1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, and 26.3**. Future 26.x releases are not automatically compatible. Minecraft 1.21.11 needs Java 21 or newer; the 26.x builds need Java 25 or newer.
@@ -187,6 +199,8 @@ Local LRC takes priority. Online lookup checks title, artist, and available dura
 The card labels the source; **Lyrics → View lyrics source** opens the actual LRCLIB record when available. Requests identify this project, run sequentially with a 250 ms gap, and check HTTP status and content type before decoding JSON. HTTP 429 and 503 respect `Retry-After`, including waits longer than five minutes. Brief overloads get one retry; long cooldowns return immediately to keep the lyric worker responsive. Rich YAML uses a safe parser with size, depth, alias, and duplicate-key restrictions. No timing is synthesized from plain lyrics.
 
 ## Build and verification
+
+Release 1.5.0 was verified on 2026-10-13: **73 tests per target, 438 passes, zero failures**. Four opt-in tests are skipped in regular builds; the raster benchmark and animated preview generator passed separately for this release. Motion regressions cover timestamp boundaries, seeking, Unicode measurement, frame-rate-independent smoothing, reduced motion, independent lyric-animation disabling, and appearance-profile persistence. In-game checks on 1.21.11 and 26.3 exercised the Motion controls, reader, diagnostics, import and rendering presets; compact screens and the HUD were visually inspected. All six release JARs passed metadata, dependency, smoke-harness exclusion and SHA-256 verification.
 
 Release 1.4.2 was verified on 2026-10-13: 66 tests passed on each target (396 passes, zero failures). Two opt-in live LRCLIB tests passed separately; the Zensery check used the combined Windows artist/album field with an empty album field and loaded record 32429053. New regressions cover that metadata format, recovered album ranking, player changes, broader manual discovery, saved selections, and diagnostic privacy. Minecraft 1.21.11 and 26.3 checks exercised the reader and diagnostics clipboard action; the compact layout was visually inspected. All six JARs passed version/target, bundled dependency, smoke-harness exclusion, and SHA-256 checks.
 

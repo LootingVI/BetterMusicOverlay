@@ -227,5 +227,10 @@ public final class LyricsService implements AutoCloseable {
         var lines=result.lines();double time=track.elapsed()+s.lyricsOffset+correction.offset();int index=Lyrics.current(lines,time);
         return index<0||Double.isFinite(lines.get(index).end())&&time>=lines.get(index).end()?"":lines.get(index).highlighted(time);
     }
+    public LyricMotion.Highlight visualHighlight(Track track,Settings settings){
+        if(!settings.wordHighlight||!settings.lyrics||!identity(track,settings).equals(key)||Experience.hidden(track,settings)||settings.streamer&&(settings.hideLyrics||correction.explicit()))return LyricMotion.Highlight.NONE;
+        var lines=result.lines();double position=track.elapsed()+settings.lyricsOffset+correction.offset();int index=Lyrics.current(lines,position);
+        return index<0?LyricMotion.Highlight.NONE:LyricMotion.highlight(lines.get(index),position,settings.animation&&!settings.lyricMotion.equals("OFF"));
+    }
     @Override public synchronized void close(){closed=true;generation++;if(pending!=null)pending.cancel(true);if(candidatePending!=null)candidatePending.cancel(true);worker.shutdownNow();http.shutdownNow();}
 }

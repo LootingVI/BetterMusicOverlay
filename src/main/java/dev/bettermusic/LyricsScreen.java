@@ -11,7 +11,9 @@ public final class LyricsScreen extends Screen {
     private record Row(String text,int index,double time,int start,String stamp){}
     private final Screen parent;
     private int left,top,pw,ph,viewTop,viewBottom;
-    private double scroll;
+    private double scroll,targetScroll,focusRow=Double.NaN,focusHeight=20;
+    private long lastFrame,activeStarted,transcriptReceived;
+    private int focusedIndex=-2;
     private boolean follow=true;
     private String trackKey="",notice="";
     private List<Row> rows=List.of();
@@ -45,8 +47,10 @@ public final class LyricsScreen extends Screen {
     private void nudge(double delta){if(!currentTrack())return;try{BetterMusic.lyrics.nudge(displayed,delta);notice="Saved song offset "+String.format(Locale.ROOT,"%+.2fs",BetterMusic.lyrics.correction().offset());}catch(Exception e){notice="Start a track before adjusting sync";}}
     @Override public void tick(){
         displayed=BetterMusic.media.track();String id=LyricCorrections.key(displayed);
-        if(!id.equals(trackKey)){trackKey=id;scroll=0;follow=true;notice="";content=null;followButton.setMessage(Overlay.smoothText("Following playback"));}
+        if(!id.equals(trackKey)){trackKey=id;scroll=targetScroll=0;focusRow=Double.NaN;focusedIndex=-2;follow=true;notice="";content=null;followButton.setMessage(Overlay.smoothText("Following playback"));}
         transcript=BetterMusic.lyrics.transcript(displayed,BetterMusic.settings);
+        transcriptReceived=System.nanoTime();
+        if(focusedIndex!=transcript.current()){focusedIndex=transcript.current();activeStarted=System.nanoTime();}
         boolean timed=!transcript.lines().isEmpty();followButton.active=timed;
         followButton.setMessage(Overlay.smoothText(timed?(follow?"Following playback":"Resume following"):"Manual reading"));
         for(var button:timingButtons)button.active=timed;
@@ -61,8 +65,7 @@ public final class LyricsScreen extends Screen {
         }
         if(follow&&!transcript.lines().isEmpty()){
             int row=0;for(int i=0;i<rows.size();i++)if(rows.get(i).index()==transcript.current()){row=i;break;}
-            double target=Math.max(0,row*20-(viewBottom-viewTop)/3.0);
-            if(Math.abs(target-scroll)>100||!BetterMusic.settings.animation)scroll=target;else scroll+=(target-scroll)*.35;
+            targetScroll=Settings.clamp(row*20-(viewBottom-viewTop)/3.0,0,Math.max(0,rows.size()*20-(viewBottom-viewTop)));
         }
         scroll=Settings.clamp(scroll,0,Math.max(0,rows.size()*20-(viewBottom-viewTop)));
     }
@@ -78,6 +81,11 @@ public final class LyricsScreen extends Screen {
         return parts.isEmpty()?List.of(""):parts;
     }
     @Override public void render(GuiGraphics g,int mx,int my,float delta){
+        long now=System.nanoTime();double dt=lastFrame==0?0:Math.min(.1,(now-lastFrame)/1e9);lastFrame=now;
+        boolean animate=BetterMusic.settings.animation&&!BetterMusic.settings.lyricMotion.equals("OFF");
+        boolean flow=animate&&BetterMusic.settings.lyricMotion.equals("FLOW");
+        double position=transcript==null?0:transcript.position()+(displayed.playing()?Settings.clamp((now-transcriptReceived)/1e9,0,.1):0);
+        if(follow&&transcript!=null&&!transcript.lines().isEmpty())scroll=flow?LyricMotion.approach(scroll,targetScroll,dt):targetScroll;
         UiSkin.backdrop(g,width,height,left,top,pw,ph);
         Track safe=Experience.privateTrack(displayed,BetterMusic.settings);
         String title=Experience.hidden(displayed,BetterMusic.settings)?"Private listening":safe.present()?safe.title():"Lyrics reader";
@@ -87,17 +95,32 @@ public final class LyricsScreen extends Screen {
         Overlay.text(g,Overlay.fit(state+" / "+(timed?"CLICK A LINE TO SEEK":"READ WITHOUT TIMING"),pw-28),left+14,top+28,0xffaaa5bf);
         g.enableScissor(left+8,viewTop,left+pw-8,viewBottom);
         if(rows.isEmpty())Overlay.text(g,Overlay.fit(transcript==null?"Waiting for lyrics ...":transcript.status(),pw-32),left+16,viewTop+10,0xffaaa5bf);
+        int first=-1,count=0;
+        if(timed&&transcript.current()>=0){
+            var current=transcript.lines().get(transcript.current());
+            if(!Double.isFinite(current.end())||position<current.end())for(int i=0;i<rows.size();i++)if(rows.get(i).index()==transcript.current()){if(first<0)first=i;count++;}
+        }
+        if(first>=0){
+            focusRow=flow&&Double.isFinite(focusRow)?LyricMotion.approach(focusRow,first*20,dt):first*20;focusHeight=flow?LyricMotion.approach(focusHeight,count*20,dt):count*20;
+            int fy=viewTop+(int)(focusRow-scroll);UiSkin.surface(g,left+10,fy-2,pw-20,(int)focusHeight,UiSkin.SELECTED);
+            Overlay.round(g,left+10,fy+3,2,Math.max(8,(int)focusHeight-10),1,0xffcba2ef);
+        }else focusRow=Double.NaN;
+        double entrance=animate?LyricMotion.ease((now-activeStarted)/3e8):1;
         for(int i=Math.max(0,(int)scroll/20);i<Math.min(rows.size(),(int)((scroll+viewBottom-viewTop)/20)+2);i++){
             Row row=rows.get(i);int y=viewTop+i*20-(int)scroll;
             boolean active=timed&&row.index()==transcript.current();
             var line=timed?transcript.lines().get(row.index()):null;
-            if(active&&Double.isFinite(line.end())&&transcript.position()>=line.end())active=false;
-            if(active){UiSkin.surface(g,left+10,y-2,pw-20,20,UiSkin.SELECTED);Overlay.round(g,left+10,y+3,2,10,1,0xffcba2ef);}
+            if(active&&Double.isFinite(line.end())&&position>=line.end())active=false;
             if(timed)Overlay.text(g,row.stamp(),left+16,y+4,0xff8e879e);
-            Overlay.text(g,row.text(),left+(timed?56:16),y+4,active?0xffeae1f4:0xffb0a7bf);
+            int shift=active&&flow?(int)((1-entrance)*5*BetterMusic.settings.motionIntensity):0;
+            int textX=left+(timed?56:16)+shift;
+            int color=active?((int)(170+85*entrance)<<24)|0xeae1f4:0xffb0a7bf;
+            Overlay.text(g,row.text(),textX,y+4,color);
             if(active&&BetterMusic.settings.wordHighlight&&!line.words().isEmpty()){
-                int end=Math.max(0,Math.min(row.text().length(),line.highlighted(transcript.position()).length()-row.start()));
-                if(end>0)Overlay.text(g,row.text().substring(0,end),left+56,y+4,0xffcba2ef);
+                var highlight=LyricMotion.highlight(line,position,animate);
+                double reveal=highlight.width(text->font.width(Overlay.smoothText(text)))-font.width(Overlay.smoothText(line.text().substring(0,row.start())));
+                int pixels=(int)Math.ceil(Settings.clamp(reveal,0,font.width(Overlay.smoothText(row.text()))));
+                if(pixels>0){g.enableScissor(textX,y,textX+pixels,y+16);Overlay.text(g,row.text(),textX,y+4,0xffdbb9ff);g.disableScissor();}
             }
         }
         g.disableScissor();
@@ -105,7 +128,7 @@ public final class LyricsScreen extends Screen {
         Overlay.text(g,Overlay.fit(footer,pw-28),left+14,top+ph-41,0xffaaa5bf);super.render(g,mx,my,delta);
     }
     @Override public boolean mouseScrolled(double x,double y,double horizontal,double vertical){
-        if(x>=left&&x<=left+pw&&y>=viewTop&&y<=viewBottom){follow=false;scroll=Settings.clamp(scroll-vertical*40,0,Math.max(0,rows.size()*20-(viewBottom-viewTop)));followButton.setMessage(Overlay.smoothText("Resume following"));return true;}
+        if(x>=left&&x<=left+pw&&y>=viewTop&&y<=viewBottom){follow=false;scroll=targetScroll=Settings.clamp(scroll-vertical*40,0,Math.max(0,rows.size()*20-(viewBottom-viewTop)));followButton.setMessage(Overlay.smoothText("Resume following"));return true;}
         return super.mouseScrolled(x,y,horizontal,vertical);
     }
     @Override public boolean mouseClicked(MouseButtonEvent event,boolean doubleClick){

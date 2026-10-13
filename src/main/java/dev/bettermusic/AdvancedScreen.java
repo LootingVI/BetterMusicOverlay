@@ -22,7 +22,8 @@ public final class AdvancedScreen extends Screen {
     @Override protected void init(){
         candidateChoice=null;tooltipId=-1;
         pw=Math.min(760,width-16);ph=Math.min(340,height-16);left=(width-pw)/2;top=(height-ph)/2;cx=left+102;cw=pw-118;col=(cw-8)/2;row=top+54;
-        for(int i=0;i<6;i++){int p=i;addRenderableWidget(new StudioScreen.StudioButton(left+10,top+42+i*26,76,22,new String[]{"Behavior","Players","Profiles","Privacy","Correction","Rendering"}[i],()->{page=p;message="";rebuildWidgets();}).selected(page==i));}
+        int navStep=Math.min(26,(ph-62)/7);
+        for(int i=0;i<7;i++){int p=i;addRenderableWidget(new StudioScreen.StudioButton(left+10,top+42+i*navStep,76,Math.min(22,navStep-2),new String[]{"Behavior","Players","Profiles","Privacy","Correction","Rendering","Motion"}[i],()->{page=p;message="";rebuildWidgets();}).selected(page==i));}
         int a=cx,b=cx+8+col;
         switch(page){
             case 0 -> {
@@ -72,12 +73,22 @@ public final class AdvancedScreen extends Screen {
                 button(b,row+72,col,"Explicit: "+on(BetterMusic.lyrics.correction().explicit()),()->saveCorrection(BetterMusic.lyrics.correction().recording(),!BetterMusic.lyrics.correction().explicit()));
                 button(left+pw-78,top+7,66,"Reset",()->{try{BetterMusic.lyrics.resetCorrection(correctionTrack);offset=0;message="Correction reset";rebuildWidgets();}catch(Exception e){message="Could not reset correction";}});
             }
-            default -> {
+            case 5 -> {
                 button(a,row,cw,"Preset: "+s().renderQuality,()->change(()->s().renderQuality=switch(s().renderQuality){case "QUALITY"->"BALANCED";case "BALANCED"->"SAVER";default->"QUALITY";}));
                 button(a,row+28,col,"Motion: "+on(s().animation),()->change(()->s().animation=!s().animation));
                 button(b,row+28,col,"Artwork fade: "+on(s().transitions),()->change(()->s().transitions=!s().transitions));
                 button(a,row+56,cw,"Overlay limit: "+RenderBudget.fps(s().renderQuality)+" frames / second",()->{}).active=false;
                 button(a,row+84,cw,"Restore balanced settings",()->change(()->{s().renderQuality="BALANCED";s().animation=true;}));
+            }
+            default -> {
+                button(a,row,col,"Motion: "+on(s().animation),()->change(()->s().animation=!s().animation));
+                button(b,row,col,"Lyrics: "+s().lyricMotion,()->change(()->s().lyricMotion=switch(s().lyricMotion){case "FLOW"->"FADE";case "FADE"->"OFF";default->"FLOW";}));
+                button(a,row+24,col,"Intensity: "+Math.round(s().motionIntensity*100)+"%",()->change(()->s().motionIntensity=s().motionIntensity>=1?.25:Math.min(1,s().motionIntensity+.25)));
+                button(b,row+24,col,"Ambient drift: "+on(s().ambientMotion),()->change(()->s().ambientMotion=!s().ambientMotion));
+                button(a,row+48,col,"Artwork halo: "+on(s().artworkOrbit),()->change(()->s().artworkOrbit=!s().artworkOrbit));
+                button(b,row+48,col,"Word reveal: "+on(s().wordHighlight),()->change(()->s().wordHighlight=!s().wordHighlight));
+                button(a,row+72,col,"Track fade: "+on(s().transitions),()->change(()->s().transitions=!s().transitions));
+                button(b,row+72,col,"Reset motion",()->change(()->{s().animation=true;s().lyricMotion="FLOW";s().motionIntensity=.75;s().ambientMotion=true;s().artworkOrbit=true;s().wordHighlight=true;s().transitions=true;}));
             }
         }
         button(left+pw-84,top+ph-28,72,"Back",this::onClose);
@@ -95,8 +106,8 @@ public final class AdvancedScreen extends Screen {
     @Override public void render(GuiGraphics g,int mx,int my,float delta){
         UiSkin.backdrop(g,width,height,left,top,pw,ph);
         Overlay.text(g,"Settings",left+16,top+15,0xffc4a1ee);g.fill(cx-10,top+38,cx-9,top+ph-40,0xff282532);
-        Overlay.text(g,Overlay.fit(new String[]{"Smart behavior","Music players","Your profiles","Streamer privacy","Lyric correction","Performance"}[page],cw-(page==4?72:0)),cx,top+15,0xffeeeafa);
-        String hint=switch(page){case 0->"Word sync: LRCLIB or Enhanced LRC.";case 1->"Start playback to discover players.";case 2->"Profiles keep your privacy choices.";case 3->"Explicit tracks must be marked manually.";case 4->BetterMusic.lyrics.candidateStatus();default->"Quality 30 fps · Balanced 20 · Saver 10";};
+        Overlay.text(g,Overlay.fit(new String[]{"Smart behavior","Music players","Your profiles","Streamer privacy","Lyric correction","Performance","Motion design"}[page],cw-(page==4?72:0)),cx,top+15,0xffeeeafa);
+        String hint=switch(page){case 0->"Word sync: LRCLIB or Enhanced LRC.";case 1->"Start playback to discover players.";case 2->"Profiles keep your privacy choices.";case 3->"Explicit tracks must be marked manually.";case 4->BetterMusic.lyrics.candidateStatus();case 5->"Quality 30 fps · Balanced 20 · Saver 10";default->"Word effects follow supplied timestamps.";};
         if(page==3){Overlay.text(g,Overlay.fit("Hide player IDs containing (comma separated):",cw),cx,row+54,0xffaaa5bf);UiSkin.surface(g,cx,row+68,cw,24,UiSkin.FIELD);}
         int info=Math.min(row+126,top+ph-65);
         if(page==4){
@@ -113,7 +124,7 @@ public final class AdvancedScreen extends Screen {
     private static String candidate(LyricsService.Candidate c){return (c.wordSync()?"WORDS · ":c.synced()?"SYNC · ":"PLAIN · ")+c.title()+" · "+c.artist()+" · "+c.album()+" · "+Math.round(c.duration())+"s";}
     @Override public void renderBackground(GuiGraphics g,int mx,int my,float delta){}
     @Override public boolean isPauseScreen(){return false;}
-    void showPage(int value){page=Math.max(0,Math.min(5,value));rebuildWidgets();}
+    void showPage(int value){page=Math.max(0,Math.min(6,value));rebuildWidgets();}
     @Override public void onClose(){BetterMusic.save();minecraft.setScreen(parent);}
     @Override public void removed(){BetterMusic.save();}
 }

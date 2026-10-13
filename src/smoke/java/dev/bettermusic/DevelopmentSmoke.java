@@ -17,7 +17,7 @@ public final class DevelopmentSmoke implements ClientModInitializer {
     private int ticks;
     private boolean started;
     private String previousClipboard;
-    private Track sample(boolean plain){return new Track(plain?"Original plain lyrics":"Small worlds, wide skies","Better Music demo","SMOKE",false,12,60,"",System.nanoTime(),"Original examples");}
+    private Track sample(boolean plain){return new Track(plain?"Original plain lyrics":"Small worlds, wide skies","Better Music demo","SMOKE",false,12+(ticks>=590?(ticks-590)*.05:0),60,"",System.nanoTime(),"Original examples");}
     @Override public void onInitializeClient(){
         BetterMusic.media.close();
         try{
@@ -28,7 +28,7 @@ public final class DevelopmentSmoke implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(client->{
             if(!started){if(!(client.screen instanceof TitleScreen))return;started=true;}
             ticks++;
-            try{var field=MediaService.class.getDeclaredField("track");field.setAccessible(true);field.set(BetterMusic.media,sample(ticks>=400));var received=MediaService.class.getDeclaredField("lastUpdate");received.setAccessible(true);received.setLong(BetterMusic.media,System.nanoTime());}catch(Exception e){throw new RuntimeException(e);}
+            try{var field=MediaService.class.getDeclaredField("track");field.setAccessible(true);field.set(BetterMusic.media,sample(ticks>=400&&ticks<590));var received=MediaService.class.getDeclaredField("lastUpdate");received.setAccessible(true);received.setLong(BetterMusic.media,System.nanoTime());}catch(Exception e){throw new RuntimeException(e);}
             if(ticks==40){client.getWindow().setWindowed(1600,1000);BetterMusic.settings.scene("REFERENCE");BetterMusic.settings.renderQuality="BALANCED";BetterMusic.settings.streamer=false;BetterMusic.settings.onlineLyrics=false;BetterMusic.settings.smartHud=true;client.options.guiScale().set(2);client.resizeDisplay();var studio=new StudioScreen(client.screen);client.setScreen(studio);studio.showTab(0);}
             if(ticks==60){click(client.screen,"Layout: STUDIO");if(!BetterMusic.settings.layout.equals("AURORA")||BetterMusic.settings.smartHud)throw new AssertionError("Layout button did not disable collapse");BetterMusic.LOG.info("SMOKE PASS: layout button selected Aurora and disabled collapse");}
             if(ticks==80)Screenshot.grab(client.gameDirectory,"studio-smoke.png",client.getMainRenderTarget(),1,message->BetterMusic.LOG.info("Smoke screenshot: {}",message.getString()));
@@ -67,7 +67,12 @@ public final class DevelopmentSmoke implements ClientModInitializer {
             if(ticks==520){var more=new AdvancedScreen(client.screen);client.setScreen(more);more.showPage(5);}
             if(ticks==540){click(client.screen,"Preset: BALANCED");if(!BetterMusic.settings.renderQuality.equals("SAVER"))throw new AssertionError("Quality setting ignored click");BetterMusic.LOG.info("SMOKE PASS: rendering preset selected Saver");}
             if(ticks==550)Screenshot.grab(client.gameDirectory,"rendering-smoke.png",client.getMainRenderTarget(),1,message->BetterMusic.LOG.info("Smoke screenshot: {}",message.getString()));
-            if(ticks==565)client.stop();
+            if(ticks==560){var more=new AdvancedScreen(client.screen);client.setScreen(more);more.showPage(6);}
+            if(ticks==570){click(client.screen,"Reset motion");click(client.screen,"Lyrics: FLOW");if(!BetterMusic.settings.lyricMotion.equals("FADE"))throw new AssertionError("Lyric motion choice did not change");BetterMusic.LOG.info("SMOKE PASS: motion controls selected Fade and restored defaults");click(client.screen,"Reset motion");}
+            if(ticks==580)Screenshot.grab(client.gameDirectory,"motion-settings-smoke.png",client.getMainRenderTarget(),1,message->BetterMusic.LOG.info("Smoke screenshot: {}",message.getString()));
+            if(ticks==590){client.getWindow().setWindowed(1440,900);client.options.guiScale().set(2);client.resizeDisplay();BetterMusic.settings.scene("LYRIC LOUNGE");client.setScreen(new HudScreen());}
+            if(ticks==610)Screenshot.grab(client.gameDirectory,"motion-hud-smoke.png",client.getMainRenderTarget(),1,message->BetterMusic.LOG.info("Smoke screenshot: {}",message.getString()));
+            if(ticks==625)client.stop();
         });
     }
     private static void click(Screen screen,String label){

@@ -25,6 +25,7 @@ public final class Overlay {
     private static String lastTitle="";
     private static String lastLyric="";
     private static long lyricStarted;
+    private static List<String> lastLines=List.of(),previousLines=List.of();
     private static int textureWidth,textureHeight;
     private record Identity(String source,String title,String artist,HudPainter.Style style,double density,boolean privateLyrics){}
     private static Identity renderIdentity;
@@ -61,18 +62,21 @@ public final class Overlay {
         var identity=new Identity(original.source(),track.title(),track.artist(),style,density,s.streamer&&BetterMusic.lyrics.correction().explicit());
         if(!identity.equals(renderIdentity)){
             renderIdentity=identity;renderGeneration++;Frame obsolete=pending.getAndSet(null);if(obsolete!=null)recycled.set(obsolete.pixels());lastPaint=0;lastStill=null;
+            lastLines=List.of();previousLines=List.of();lastLyric="";lyricStarted=now;
             if(texture!=null){Minecraft.getInstance().getTextureManager().release(PANEL);texture=null;}
         }
-        if(!lastTitle.equals(track.title())){lastTitle=track.title();titleStarted=now;}
+        String titleIdentity=track.source()+"\n"+track.artist()+"\n"+track.title();
+        if(!lastTitle.equals(titleIdentity)){lastTitle=titleIdentity;titleStarted=now;}
         if(!busy&&now-lastPaint>RenderBudget.interval(s.renderQuality,s.animation)) {
             lastPaint=now;
             List<String> lines=original.source().equals("PREVIEW")?List.of("Your lyrics, right here.","Stay in your world.","Find your own frequency."):BetterMusic.lyrics.visible(original,s);
             String words=s.wordHighlight?BetterMusic.lyrics.highlighted(original,s):"";
             String current=lines.isEmpty()?"":lines.get(0);
-            if(!lastLyric.equals(current)){lastLyric=current;lyricStarted=now;}
+            if(!lastLyric.equals(current)){previousLines=lastLines;lastLyric=current;lyricStarted=now;}lastLines=lines;
             double animationTime=(now-titleStarted)/1e9;
             double lyricTime=(now-lyricStarted)/1e9;
             String lyricSource=track.source().equals("PREVIEW")?"DEMO LYRICS":BetterMusic.lyrics.attribution();
+            var lyricFrame=new HudPainter.LyricFrame(previousLines,BetterMusic.lyrics.visualHighlight(original,s));
             var still=new StillFrame(Math.floor(track.elapsed()),track.duration(),track.playing(),lines,words,lyricSource,s.artwork?BetterMusic.art.bitmap():null,(int)(alpha*255));
             if(s.animation||!still.equals(lastStill)||texture==null){
             lastStill=still;busy=true;
@@ -80,7 +84,7 @@ public final class Overlay {
             PAINTER.execute(()->{
                 try {
                     var art=track.source().equals("PREVIEW")||!s.artwork?null:BetterMusic.art.blended(s.animation&&s.transitions);
-                    var image=canvas=HudPainter.paintInto(canvas,style,track,art,lines,density,animationTime,lyricTime,lyricSource,words);
+                    var image=canvas=HudPainter.paintInto(canvas,style,track,art,lines,density,animationTime,lyricTime,lyricSource,lyricFrame);
                     int[] pixels=recycled.getAndSet(null);if(pixels==null||pixels.length!=image.getWidth()*image.getHeight())pixels=new int[image.getWidth()*image.getHeight()];
                     image.getRGB(0,0,image.getWidth(),image.getHeight(),pixels,0,image.getWidth());
                     RenderBudget.toAbgr(pixels,alpha);

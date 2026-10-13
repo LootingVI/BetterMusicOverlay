@@ -59,7 +59,7 @@ public final class StudioScreen extends Screen {
                 button(right,body,column,20,"Hide when empty: "+on(s().hideIdle),()->{s().hideIdle=!s().hideIdle;rebuildWidgets();});
                 button(contentX,body+step,column,20,"Artwork: "+on(s().artwork),()->{s().artwork=!s().artwork;rebuildWidgets();});
                 button(right,body+step,column,20,"Progress: "+on(s().progress),()->{s().progress=!s().progress;rebuildWidgets();});
-                button(contentX,body+2*step,column,20,"Motion: "+on(s().animation),()->{s().animation=!s().animation;rebuildWidgets();});
+                button(contentX,body+2*step,column,20,"Motion settings",()->{var more=new AdvancedScreen(this);minecraft.setScreen(more);more.showPage(6);});
                 button(right,body+2*step,column,20,"Quick controls [M]",()->minecraft.setScreen(new ControlScreen(this)));
                 fields.add(new Field(contentX,body+3*step,column,controlHeight,""));
                 EditBox source=new EditBox(font,contentX+8,body+3*step+(controlHeight-8)/2,column-16,12,Component.literal("Preferred app ID contains (blank = automatic)"));source.setBordered(false);source.setTextColor(0xffddd6ef);

@@ -19,6 +19,9 @@ public final class Settings implements Cloneable {
     public double expandSeconds=8, duckLevel=.2;
     public String hiddenPlayers="";
     public String renderQuality="BALANCED";
+    public String lyricMotion="FLOW";
+    public boolean ambientMotion=true,artworkOrbit=true;
+    public double motionIntensity=.75;
     public Settings copy(){try{return (Settings)super.clone();}catch(CloneNotSupportedException e){throw new AssertionError(e);}}
     /** An explicit design choice must not be silently replaced by automatic collapse. */
     public void selectLayout(String value){layout=value;smartHud=false;validate();}
@@ -30,6 +33,8 @@ public final class Settings implements Cloneable {
         if (preferred == null) preferred = "";
         if(hiddenPlayers==null)hiddenPlayers="";
         if(!java.util.List.of("QUALITY","BALANCED","SAVER").contains(renderQuality==null?"":renderQuality))renderQuality="BALANCED";
+        if(!java.util.List.of("FLOW","FADE","OFF").contains(lyricMotion==null?"":lyricMotion))lyricMotion="FLOW";
+        motionIntensity=clamp(motionIntensity,.25,1);
         expandSeconds=clamp(expandSeconds,2,30);duckLevel=clamp(duckLevel,0,1);
         accent &= 0xffffff; background &= 0xffffff; foreground &= 0xffffff;
         lyricsOffset=clamp(lyricsOffset,-10,10);lyricsLines=Math.max(1,Math.min(3,lyricsLines));
