@@ -32,9 +32,13 @@ public final class LyricsScreen extends Screen {
         followButton=button(left+12,top+69,bw,follow?"Following playback":"Resume following",()->{follow=true;followButton.setMessage(Overlay.smoothText("Following playback"));});
         button(left+16+bw,top+69,bw,"LRCLIB lookup: "+(BetterMusic.settings.onlineLyrics?"On":"Off"),()->{BetterMusic.settings.onlineLyrics=!BetterMusic.settings.onlineLyrics;BetterMusic.lyrics.update(BetterMusic.media.track(),BetterMusic.settings);BetterMusic.save();rebuildWidgets();});
         button(left+20+bw*2,top+69,bw,"Reload lyrics",()->BetterMusic.lyrics.reload());
-        button(left+pw-84,top+ph-28,72,"Back",this::onClose);
-        button(left+pw-180,top+ph-28,90,"Find recording",()->{var more=new AdvancedScreen(this);minecraft.setScreen(more);more.showPage(4);});
-        button(left+12,top+ph-28,80,"Import lyrics",()->minecraft.setScreen(new LyricsImportScreen(this)));
+        int footerWidth=(pw-42)/4;
+        button(left+12,top+ph-28,footerWidth,"Import lyrics",()->minecraft.setScreen(new LyricsImportScreen(this)));
+        button(left+18+footerWidth,top+ph-28,footerWidth+20,"Copy diagnostics",()->{
+            minecraft.keyboardHandler.setClipboard(BetterMusic.lyrics.diagnostics(BetterMusic.media.track(),BetterMusic.settings));notice="Diagnostics copied; includes current track metadata";
+        }).setTooltip(net.minecraft.client.gui.components.Tooltip.create(Overlay.smoothText("Copy current track metadata, query details and request results. No lyric text. Streamer mode redacts track details.")));
+        button(left+44+footerWidth*2,top+ph-28,footerWidth,"Find recording",()->{var more=new AdvancedScreen(this);minecraft.setScreen(more);more.showPage(4);});
+        button(left+50+footerWidth*3,top+ph-28,footerWidth-20,"Back",this::onClose);
     }
     private StudioScreen.StudioButton button(int x,int y,int w,String label,Runnable action){return addRenderableWidget(new StudioScreen.StudioButton(x,y,w,20,label,action));}
     private boolean currentTrack(){if(!trackKey.equals(LyricCorrections.key(BetterMusic.media.track()))){notice="Track changed; wait for the new lyrics";return false;}return true;}

@@ -42,6 +42,14 @@ The cards below are rendered by the mod with original example track text. The re
 
 </details>
 
+## Fixed in 1.4.2 — Apple Music on Windows sending the album inside the artist
+
+Apple Music's Windows media session can send `Artist — Album - Single` as the artist while leaving its album field empty. Earlier versions queried LRCLIB with that combined artist and rejected the correct recordings. The lookup now recovers the artist and album for this player format, including album names containing an em dash. Local lyric filenames and saved corrections keep their existing identities.
+
+**Find recording** also tries a title-only search when the artist search returns no records. This exposes entries filed under an artist alias or a different credit; choose **Use displayed recording** to save the match. Automatic selection continues to check title, artist, version, and known duration.
+
+The lyrics reader has **Copy diagnostics** for the current track: mod version, raw player metadata, normalized search metadata, lookup status, and request results. The report excludes lyric text, artwork and local file paths; Streamer mode redacts track details. Nothing is uploaded by this button. Check the report before sharing it in a bug report.
+
 ## Fixed in 1.4.1 — lyrics hidden by album metadata differences
 
 Apple Music can label an album with `- Single` or `- EP`, while LRCLIB stores the matching recording under another album spelling. The old lookup rejected those differences and repeated the album filter in its fallback search. For example, this hid the existing synchronized entry for **GERÄT (bitte cancelt mich 2)** by **Zensery**.
@@ -122,7 +130,7 @@ Click the timeline in the studio preview or **M** controls to seek, if the curre
 
 1. Install **Fabric Loader 0.19.5 or newer** for your Minecraft version.
 2. Install the matching **Fabric API** from https://modrinth.com/mod/fabric-api.
-3. Download **one** matching `better-music-overlay-<minecraft>-1.4.1.jar` from [GitHub Releases](https://github.com/LootingVI/BetterMusicOverlay/releases/latest) and copy it into your instance's `mods` folder. Remove the previous Better Music JAR when upgrading. Local builds are packaged under `dist/1.4.1/`.
+3. Download **one** matching `better-music-overlay-<minecraft>-1.4.2.jar` from [GitHub Releases](https://github.com/LootingVI/BetterMusicOverlay/releases/latest) and copy it into your instance's `mods` folder. Remove the previous Better Music JAR when upgrading. Local builds are packaged under `dist/1.4.2/`.
 4. Start music in a desktop app or browser and launch Minecraft.
 
 Separate builds are provided for **1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, and 26.3**. Future 26.x releases are not automatically compatible. Minecraft 1.21.11 needs Java 21 or newer; the 26.x builds need Java 25 or newer.
@@ -174,11 +182,13 @@ Primary-source documentation checked on 2026-10-11:
 - [LyricFind Lyric Display](https://www.lyricfind.com/products/lyric-display): offers line- and word-synchronized display through its partner offering. Not integrated without an access arrangement.
 - [lyrics.ovh project documentation](https://github.com/NTag/lyrics.ovh): documents plain-text output and aggregation from lyrics websites. It does not document synchronized timestamps, so it is not used as an automatic timing fallback.
 
-Local LRC takes priority. Online lookup checks title, artist, and available duration within two seconds. Album spelling is a ranking preference; fallback search does not filter by album. Live/remix/acoustic qualifiers are retained. Without a player duration, search first prefers a matching album when available and accepts only results whose durations span no more than two seconds. Otherwise, choose the recording manually. Apple Music's appended album is removed from the artist only when it matches independently supplied album metadata, allowing Single/EP suffix differences.
+Local LRC takes priority. Online lookup checks title, artist, and available duration within two seconds. Album spelling is a ranking preference; fallback search does not filter by album. Live/remix/acoustic qualifiers are retained. Without a player duration, search first prefers a matching album when available and accepts only results whose durations span no more than two seconds. Otherwise, choose the recording manually. Apple Music's Windows `Artist — Album` format also works when the album field is empty. For other players, an appended album must match independently supplied album metadata, allowing Single/EP suffix differences.
 
 The card labels the source; **Lyrics → View lyrics source** opens the actual LRCLIB record when available. Requests identify this project, run sequentially with a 250 ms gap, and check HTTP status and content type before decoding JSON. HTTP 429 and 503 respect `Retry-After`, including waits longer than five minutes. Brief overloads get one retry; long cooldowns return immediately to keep the lyric worker responsive. Rich YAML uses a safe parser with size, depth, alias, and duplicate-key restrictions. No timing is synthesized from plain lyrics.
 
 ## Build and verification
+
+Release 1.4.2 was verified on 2026-10-13: 66 tests passed on each target (396 passes, zero failures). Two opt-in live LRCLIB tests passed separately; the Zensery check used the combined Windows artist/album field with an empty album field and loaded record 32429053. New regressions cover that metadata format, recovered album ranking, player changes, broader manual discovery, saved selections, and diagnostic privacy. Minecraft 1.21.11 and 26.3 checks exercised the reader and diagnostics clipboard action; the compact layout was visually inspected. All six JARs passed version/target, bundled dependency, smoke-harness exclusion, and SHA-256 checks.
 
 Release 1.4.1 was verified on 2026-10-12: 58 tests passed on each target (348 passes, zero failures). Two optional live LRCLIB tests passed separately, including the reported Zensery case using Apple Music's public title/album metadata. Deterministic regressions cover album edition differences, missing duration, ambiguous recording lengths, and rejection of incorrect artists or versions. The six packaged JARs passed metadata, dependency, smoke-harness exclusion, and checksum checks. This fix changes lookup logic; the in-game UI checks below were performed for 1.4.0.
 

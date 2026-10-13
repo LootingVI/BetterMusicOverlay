@@ -16,6 +16,21 @@ class LyricsDiscoveryTest {
     }
     static JsonObject matching(){return recording("GERÄT (bitte cancelt mich 2)","GERÄT (bitte cancelt mich 2)",133);}
     private void loaded(LyricsService service)throws Exception{long end=System.nanoTime()+3_000_000_000L;while(service.status().equals("Looking for lyrics ...")&&System.nanoTime()<end)Thread.sleep(5);assertNotEquals("Looking for lyrics ...",service.status());}
+    @Test void windowsAppleMusicCombinedArtistWithEmptyAlbumFindsLyrics()throws Exception{
+        var track=new Track("Example song","Example artist — Example album - Single","AppleInc.AppleMusicWin_nzyj5cx40ttqa!App",false,12,133,"",System.nanoTime(),"");
+        var queries=new java.util.concurrent.CopyOnWriteArrayList<String>();var settings=new Settings();settings.lyrics=true;settings.onlineLyrics=true;
+        try(var service=new LyricsService(folder,path->{
+            queries.add(java.net.URLDecoder.decode(path,java.nio.charset.StandardCharsets.UTF_8));
+            if(path.startsWith("get?"))return null;
+            var records=new JsonArray();var row=recording("Example song","Example album",133);row.addProperty("artistName","Example artist");records.add(row);return records;
+        })){
+            service.update(track,settings);loaded(service);
+            assertEquals("LRCLIB · LINE SYNC",service.attribution(),service.status());
+            assertEquals("get?track_name=Example song&artist_name=Example artist&album_name=Example album - Single&duration=133.0",queries.getFirst());
+            assertEquals("search?track_name=Example song&artist_name=Example artist",queries.getLast());
+            assertEquals("Example artist — Example album - Single",track.artist(),"Keep raw metadata for local filenames and corrections");
+        }
+    }
     @Test void appleSingleAlbumDoesNotHideAnExistingRecording()throws Exception{
         var calls=new AtomicInteger();var s=new Settings();s.lyrics=true;s.onlineLyrics=true;var track=appleTrack(133);
         try(var service=new LyricsService(folder,path->{calls.incrementAndGet();if(path.startsWith("get?"))return null;var records=new JsonArray();if(!path.contains("album_name="))records.add(matching());return records;})){

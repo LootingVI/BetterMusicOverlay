@@ -8,18 +8,27 @@ import java.util.Locale;
 public final class LyricsMatch {
     private LyricsMatch(){}
     static String normalized(String value){return Normalizer.normalize(value,Normalizer.Form.NFKC).toLowerCase(Locale.ROOT).replace('&',',').replaceAll("[^\\p{L}\\p{N}]+"," ").strip();}
-    public static String artist(Track track){
-        String artist=track.artist();
-        // Apple Music can append the album to the artist. Only remove an independently confirmed album.
-        int separator=artist.lastIndexOf(" — ");
-        if(separator>0&&!track.album().isBlank()&&album(artist.substring(separator+3)).equals(album(track.album())))return artist.substring(0,separator).strip();
-        return artist;
+    public record Metadata(String artist,String album){}
+    public static Metadata metadata(Track track){
+        String artist=track.artist(),album=track.album();
+        String source=track.source().toLowerCase(Locale.ROOT);
+        boolean appleWindows=source.equals("applemusic")||source.startsWith("appleinc.applemusicwin_");
+        // Windows Apple Music puts "Artist — Album" into Artist and can leave AlbumTitle empty.
+        // Other players need independent album confirmation before we split their artist field.
+        for(int separator=artist.indexOf(" — ");separator>0;separator=artist.indexOf(" — ",separator+3)){
+            String suffix=artist.substring(separator+3).strip();
+            if(!suffix.isBlank()&&(!album.isBlank()&&album(suffix).equals(album(album))||album.isBlank()&&appleWindows))
+                return new Metadata(artist.substring(0,separator).strip(),album.isBlank()?suffix:album);
+        }
+        return new Metadata(artist,album);
     }
+    public static String artist(Track track){return metadata(track).artist();}
     public static String string(JsonObject object,String key){return object.has(key)&&!object.get(key).isJsonNull()?object.get(key).getAsString():"";}
     private static String album(String value){return normalized(value.replaceFirst("(?i)\\s+[-–—]\\s*(single|ep)\\s*$",""));}
     private static int albumRank(JsonObject record,Track track){
-        if(track.album().isBlank())return 1;
-        return album(string(record,"albumName")).equals(album(track.album()))?0:1;
+        String expected=metadata(track).album();
+        if(expected.isBlank())return 1;
+        return album(string(record,"albumName")).equals(album(expected))?0:1;
     }
     private static boolean knownDuration(Track track){return Double.isFinite(track.duration())&&track.duration()>0;}
     public static boolean matches(JsonObject record,Track track,boolean search){

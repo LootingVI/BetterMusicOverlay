@@ -10,9 +10,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class LyricsLiveTest {
     @TempDir Path directory;
     @Test @EnabledIfEnvironmentVariable(named="BETTERMUSIC_LIVE_LYRICS",matches="1")
-    void appleMusicSingleAlbumFindsZenseryRecording()throws Exception{
+    void appleMusicWindowsCombinedMetadataFindsZenseryRecording()throws Exception{
         var settings=new Settings();settings.lyrics=true;settings.onlineLyrics=true;
-        var track=LyricsDiscoveryTest.appleTrack(133);
+        var catalog=LyricsDiscoveryTest.appleTrack(133);
+        var track=new Track(catalog.title(),catalog.artist()+" — "+catalog.album(),"AppleInc.AppleMusicWin_nzyj5cx40ttqa!App",false,12,133,"",System.nanoTime(),"");
         try(var service=new LyricsService(directory)){
             service.update(track,settings);long deadline=System.nanoTime()+25_000_000_000L;
             while(service.status().equals("Looking for lyrics ...")&&System.nanoTime()<deadline)Thread.sleep(50);

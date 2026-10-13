@@ -33,6 +33,7 @@ public final class LyricsService implements AutoCloseable {
     private long searchGeneration;
     private String policy="";
     private boolean readerOpen;
+    private final List<String> lookupSteps=new ArrayList<>();
     public List<Candidate> candidates(){return candidates;}
     public boolean candidatesFor(Track track){return candidateTrack.equals(LyricCorrections.key(track));}
     public String candidateStatus(){return candidateStatus;}
@@ -62,6 +63,8 @@ public final class LyricsService implements AutoCloseable {
         long ticket=generation,searchTicket=searchGeneration;String expected=key;candidates=List.of();candidateTrack=LyricCorrections.key(track);candidateStatus="Searching LRCLIB ...";
         candidatePending=worker.submit(()->{try{
             JsonElement response=request("search?track_name="+enc(track.title())+"&artist_name="+enc(LyricsMatch.artist(track)),ticket);
+            if(response==null||response.isJsonArray()&&response.getAsJsonArray().isEmpty())
+                response=request("search?track_name="+enc(track.title()),ticket);
             var found=new ArrayList<Candidate>();
             if(response!=null&&response.isJsonArray())for(JsonElement row:response.getAsJsonArray()){
                 if(!row.isJsonObject())continue;var j=row.getAsJsonObject();var rich=Lyricsfile.parse(LyricsMatch.string(j,"lyricsfile"));boolean synced=!rich.lines().isEmpty()||!LyricsMatch.string(j,"syncedLyrics").isBlank();
@@ -70,7 +73,9 @@ public final class LyricsService implements AutoCloseable {
                     found.add(new Candidate(recordId,LyricsMatch.string(j,"trackName"),LyricsMatch.string(j,"artistName"),LyricsMatch.string(j,"albumName"),duration,synced,rich.wordSync()));}catch(RuntimeException ignored){}
                 if(found.size()==20)break;
             }
-            found.sort(Comparator.comparing((Candidate c)->!c.wordSync()).thenComparing(c->!c.synced()).thenComparingDouble(c->Math.abs(c.duration()-track.duration())));
+            found.sort(Comparator.comparing((Candidate c)->!LyricsMatch.normalized(c.title()).equals(LyricsMatch.normalized(track.title())))
+                .thenComparing(c->!LyricsMatch.normalized(c.artist()).equals(LyricsMatch.normalized(LyricsMatch.artist(track))))
+                .thenComparingDouble(c->Math.abs(c.duration()-track.duration())).thenComparing(c->!c.wordSync()).thenComparing(c->!c.synced()));
             synchronized(this){if(generation==ticket&&searchGeneration==searchTicket&&expected.equals(key)){candidates=List.copyOf(found);candidateStatus=found.isEmpty()?"No alternative lyrics found":"Choose the recording that matches your music";}}
         }catch(InterruptedException e){Thread.currentThread().interrupt();}
         catch(Exception e){synchronized(this){if(generation==ticket&&searchGeneration==searchTicket)candidateStatus=e instanceof LrclibClient.CoolingDown?e.getMessage():"Search unavailable; try again later";}}});
@@ -79,19 +84,37 @@ public final class LyricsService implements AutoCloseable {
     public String attribution(){return result.source();}
     public String sourceUrl(){return result.url();}
     public Path folder(){return folder;}
+    /** Explicit clipboard export only: no lyrics, artwork, filesystem paths, or listening history. */
+    public synchronized String diagnostics(Track track,Settings settings){
+        var text=new StringBuilder(LrclibClient.USER_AGENT).append("\nLyrics lookup diagnostics\n");
+        text.append("HUD lyrics: ").append(settings.lyrics).append("\nOnline lookup: ").append(settings.onlineLyrics).append('\n');
+        if(settings.streamer)return text.append("Track metadata and lookup details hidden by streamer mode\n").toString();
+        var metadata=LyricsMatch.metadata(track);
+        text.append("Player: ").append(debugValue(track.source())).append("\nRaw title: ").append(debugValue(track.title()))
+            .append("\nRaw artist: ").append(debugValue(track.artist())).append("\nRaw album: ").append(debugValue(track.album()))
+            .append("\nQuery artist: ").append(debugValue(metadata.artist())).append("\nQuery album: ").append(debugValue(metadata.album()))
+            .append("\nDuration: ").append(track.duration()).append("s\n");
+        if(!policy.equals(identity(track,settings)))return text.append("Track changed; waiting for lookup\n").toString();
+        text.append("Status: ").append(result.message()).append("\nSource: ").append(result.url()).append('\n');
+        if(candidatesFor(track))text.append("Find recording: ").append(candidateStatus).append(" ( ").append(candidates.size()).append(" candidates )\n");
+        for(String step:lookupSteps)text.append("- ").append(step).append('\n');
+        return text.toString();
+    }
+    private static String debugValue(String value){String safe=value.replaceAll("[\\p{Cntrl}]"," ");return safe.substring(0,Math.min(512,safe.length()));}
+    private synchronized void trace(long ticket,String detail){if(generation!=ticket)return;if(lookupSteps.size()==8)lookupSteps.removeFirst();lookupSteps.add(detail);}
     private void cancelSearch(){searchGeneration++;if(candidatePending!=null)candidatePending.cancel(true);candidates=List.of();candidateTrack="";candidateStatus="Search alternate recordings with online lookup enabled";}
-    public synchronized void reload(){generation++;key="";result=Result.status("Reloading lyrics ...");if(pending!=null)pending.cancel(true);cancelSearch();cache.clear();}
+    public synchronized void reload(){generation++;key="";lookupSteps.clear();result=Result.status("Reloading lyrics ...");if(pending!=null)pending.cancel(true);cancelSearch();cache.clear();}
     public static String filename(Track t){
         String name=(t.artist()+" - "+t.title()).replaceAll("[<>:\"/\\\\|?*\\p{Cntrl}]","_").replaceAll("[. ]+$","");
         if(name.length()>180)name=name.substring(0,140)+"-"+UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8));
         return name+".lrc";
     }
-    private static String identity(Track t,Settings s){return LyricCorrections.key(t)+"\n"+s.onlineLyrics;}
+    private static String identity(Track t,Settings s){return LyricCorrections.key(t)+"\n"+t.source()+"\n"+s.onlineLyrics;}
     public synchronized void update(Track t,Settings s){
         if(closed)return;
-        String nextPolicy=LyricCorrections.key(t)+":"+s.onlineLyrics;
+        String nextPolicy=identity(t,s);
         if(!policy.equals(nextPolicy)){
-            policy=nextPolicy;generation++;key="";if(pending!=null)pending.cancel(true);cancelSearch();result=Result.status("Looking for lyrics ...");
+            policy=nextPolicy;generation++;key="";lookupSteps.clear();if(pending!=null)pending.cancel(true);cancelSearch();result=Result.status("Looking for lyrics ...");
         }
         String currentCorrection=LyricCorrections.key(t);
         if(!currentCorrection.equals(correctionKey)){
@@ -127,10 +150,11 @@ public final class LyricsService implements AutoCloseable {
                 finish(ticket,record(chosen.getAsJsonObject(),true));return;
             }
             Cached saved=cache.get(id);
-            if(saved!=null&&saved.expires()>System.nanoTime()){finish(ticket,saved.result());return;}
+            if(saved!=null&&saved.expires()>System.nanoTime()){trace(ticket,"Loaded cached result; Reload lyrics forces a fresh request");finish(ticket,saved.result());return;}
             String query="track_name="+enc(track.title())+"&artist_name="+enc(LyricsMatch.artist(track));
             String exact=query;
-            if(!track.album().isBlank())exact+="&album_name="+enc(track.album());
+            String album=LyricsMatch.metadata(track).album();
+            if(!album.isBlank())exact+="&album_name="+enc(album);
             if(track.duration()>=1&&track.duration()<=3600)exact+="&duration="+track.duration();
             JsonElement response=request("get?"+exact,ticket);
             JsonObject chosen=response!=null&&response.isJsonObject()&&LyricsMatch.matches(response.getAsJsonObject(),track,false)?response.getAsJsonObject():null;
@@ -150,8 +174,21 @@ public final class LyricsService implements AutoCloseable {
         catch(Exception e){finish(ticket,Result.status(e instanceof LrclibClient.CoolingDown?e.getMessage():"Lyrics unavailable · Reload to retry"));BetterMusic.LOG.debug("Lyrics lookup failed",e);}
     }
     private JsonElement request(String path,long ticket)throws Exception{
-        if(provider!=null){check(ticket);JsonElement response=provider.get(path);check(ticket);return response;}
-        return client.get(path,()->check(ticket));
+        String stage=path.startsWith("get/")?"Saved recording":path.startsWith("get?")?"Exact lookup":path.contains("artist_name=")?"Title + artist search":"Title-only candidate search";
+        trace(ticket,stage+": requesting");
+        try{
+            check(ticket);JsonElement response=provider!=null?provider.get(path):client.get(path,()->check(ticket));check(ticket);
+            trace(ticket,stage+": "+(response==null?"no record":response.isJsonArray()?response.getAsJsonArray().size()+" records returned":"record returned"));return response;
+        }catch(InterruptedException e){throw e;}
+        catch(Exception e){trace(ticket,stage+": "+failureReason(e));throw e;}
+    }
+    private static String failureReason(Exception e){
+        if(e instanceof LrclibClient.CoolingDown)return e.getMessage();
+        if(e instanceof HttpTimeoutException)return "request timed out";
+        if(e instanceof javax.net.ssl.SSLException)return "TLS connection failed";
+        if(e instanceof java.io.IOException&&e.getMessage()!=null&&e.getMessage().startsWith("LRCLIB "))return e.getMessage();
+        if(e instanceof JsonParseException)return "invalid JSON response";
+        return "request failed ("+e.getClass().getSimpleName()+")";
     }
     private void check(long ticket)throws InterruptedException{if(closed||generation!=ticket||Thread.currentThread().isInterrupted())throw new InterruptedException();}
     private synchronized void finish(long ticket,Result value){if(!closed&&generation==ticket)result=value;}

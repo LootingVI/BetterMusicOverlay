@@ -16,6 +16,7 @@ import java.nio.file.Files;
 public final class DevelopmentSmoke implements ClientModInitializer {
     private int ticks;
     private boolean started;
+    private String previousClipboard;
     private Track sample(boolean plain){return new Track(plain?"Original plain lyrics":"Small worlds, wide skies","Better Music demo","SMOKE",false,12,60,"",System.nanoTime(),"Original examples");}
     @Override public void onInitializeClient(){
         BetterMusic.media.close();
@@ -48,6 +49,10 @@ public final class DevelopmentSmoke implements ClientModInitializer {
             if(ticks==360){click(client.screen,"Lyrics earlier +0.25s");if(BetterMusic.lyrics.correction().offset()!=.25)throw new AssertionError("Offset button failed");BetterMusic.LOG.info("SMOKE PASS: lyrics reader timing button persisted +0.25s");}
             if(ticks==380){client.getWindow().setWindowed(854,480);client.options.guiScale().set(4);client.resizeDisplay();}
             if(ticks==390)Screenshot.grab(client.gameDirectory,"compact-reader-smoke.png",client.getMainRenderTarget(),1,message->BetterMusic.LOG.info("Smoke screenshot: {}",message.getString()));
+            if(ticks==394)previousClipboard=client.keyboardHandler.getClipboard();
+            if(ticks==395)click(client.screen,"Copy diagnostics");
+            if(ticks==397){String report=client.keyboardHandler.getClipboard();if(!report.contains("Raw artist: Better Music demo")||report.contains("A quiet start"))throw new AssertionError("Invalid diagnostics export");BetterMusic.LOG.info("SMOKE PASS: compact reader diagnostics copied metadata without lyrics");}
+            if(ticks==399)client.keyboardHandler.setClipboard(previousClipboard);
             if(ticks==400)client.setScreen(new LyricsScreen(client.screen));
             if(ticks==420)Screenshot.grab(client.gameDirectory,"plain-reader-smoke.png",client.getMainRenderTarget(),1,message->BetterMusic.LOG.info("Smoke screenshot: {}",message.getString()));
             if(ticks==440)client.setScreen(new StudioScreen(client.screen));

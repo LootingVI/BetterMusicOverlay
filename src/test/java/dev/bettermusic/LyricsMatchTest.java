@@ -31,4 +31,16 @@ class LyricsMatchTest {
         assertEquals(200.5,LyricsMatch.best(list,track("Track",200)).get("duration").getAsDouble());
         assertNull(LyricsMatch.best(list,track("Completely different track",200)));
     }
+    @Test void onlyAppleWindowsCanRecoverAnUnconfirmedAlbum(){
+        var apple=new Track("Track","Artist — Album — Deluxe - EP","AppleInc.AppleMusicWin_nzyj5cx40ttqa!App",false,0,200,"",0,"");
+        assertEquals(new LyricsMatch.Metadata("Artist","Album — Deluxe - EP"),LyricsMatch.metadata(apple));
+        var other=new Track("Track",apple.artist(),"Spotify",false,0,200,"",0,"");
+        assertEquals(new LyricsMatch.Metadata(other.artist(),""),LyricsMatch.metadata(other));
+        var clean=new Track("Track","Artist","AppleMusic",false,0,200,"",0,"");
+        assertEquals(new LyricsMatch.Metadata("Artist",""),LyricsMatch.metadata(clean));
+    }
+    @Test void confirmedAlbumCanContainAnEmDash(){
+        var track=new Track("Track","Artist — Album — Deluxe","Test",false,0,200,"",0,"Album — Deluxe");
+        assertEquals("Artist",LyricsMatch.artist(track));
+    }
 }
