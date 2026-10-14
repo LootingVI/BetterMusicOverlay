@@ -6,7 +6,7 @@ def targets = [mc12111: ['1.21.11','0.141.6+1.21.11',21], mc2610: ['26.1','0.145
 subprojects {
     def t = targets[project.name]
     apply plugin: project.name == 'mc12111' ? 'net.fabricmc.fabric-loom-remap' : 'net.fabricmc.fabric-loom'
-    version = '1.5.0'
+    version = '1.5.1'
     group = 'dev.bettermusic'
     base { archivesName = "better-music-overlay-${t[0]}" }
     repositories { mavenCentral() }

@@ -31,6 +31,23 @@ public final class LyricsMatch {
         return album(string(record,"albumName")).equals(album(expected))?0:1;
     }
     private static boolean knownDuration(Track track){return Double.isFinite(track.duration())&&track.duration()>0;}
+    /** A limited credit variant, only attempted after the complete artist credit has no match. */
+    public static Track creditVariant(Track track){
+        var metadata=metadata(track);String artist=metadata.artist();
+        if(!knownDuration(track)||album(metadata.album()).isBlank()||!artist.matches("(?i)^DJ\\s+.+"))return null;
+        String variant=artist.replaceFirst("(?i)^DJ\\s+","").strip();if(normalized(variant).length()<2)return null;
+        return new Track(track.title(),variant,track.source(),track.playing(),track.position(),track.duration(),track.cover(),track.received(),metadata.album());
+    }
+    public static JsonObject bestCreditVariant(JsonArray records,Track track){
+        Track variant=creditVariant(track);if(variant==null)return null;
+        var eligible=new JsonArray();
+        for(JsonElement item:records)if(item.isJsonObject()){
+            var record=item.getAsJsonObject();
+            // The extra album check is mandatory here: a DJ prefix alone is not proof of identity.
+            if(album(string(record,"albumName")).equals(album(variant.album()))&&matches(record,variant,true))eligible.add(record);
+        }
+        return best(eligible,variant);
+    }
     public static boolean matches(JsonObject record,Track track,boolean search){
         try {
             if(track.title().isBlank()||artist(track).isBlank())return false;

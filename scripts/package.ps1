@@ -4,11 +4,11 @@ Push-Location $root
 try {
     & .\gradlew.bat build
     if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
-    $dist = Join-Path $root 'dist\1.5.0'
+    $dist = Join-Path $root 'dist\1.5.1'
     New-Item -ItemType Directory -Force $dist | Out-Null
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     foreach ($target in @('mc12111','mc2610','mc2611','mc261','mc262','mc263')) {
-        $jar = Get-ChildItem (Join-Path $root "$target\build\libs") -Filter '*-1.5.0.jar' | Where-Object { $_.Name -notmatch '-sources|-dev' } | Select-Object -First 1
+        $jar = Get-ChildItem (Join-Path $root "$target\build\libs") -Filter '*-1.5.1.jar' | Where-Object { $_.Name -notmatch '-sources|-dev' } | Select-Object -First 1
         if ($null -eq $jar) { throw "Missing release JAR for $target" }
         $archive = [IO.Compression.ZipFile]::OpenRead($jar.FullName)
         try {

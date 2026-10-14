@@ -42,6 +42,12 @@ The cards below are rendered by the mod with original example track text. The re
 
 </details>
 
+## Fixed in 1.5.1 — different artist credits
+
+When the complete artist credit has no automatic match, a credit such as `DJ Example` can now fall back to `Example`. This narrow fallback requires the exact normalized song title, the same album after Single/EP normalization, and a known duration within two seconds. The original artist credit remains preferred. Other credit differences still use **Find recording**.
+
+If the full-credit search returns a brief LRCLIB overload, the fallback waits for the requested cooldown before trying the alternate credit. Rate limits and longer cooldowns still stop requests. Diagnostics show the credit variant and its request result; a matched recording retains its source URL and timing type.
+
 ## New in 1.5 — motion for your music
 
 Lyric lines now enter with a gentle slide and fade, with a focus surface behind the active line. The full reader smoothly follows playback and moves its focus marker between lines. When the source provides word timestamps, each word gets a short highlight reveal at its timestamp. Line-only and plain-text lyrics keep their original timing capabilities.
@@ -142,7 +148,7 @@ Click the timeline in the studio preview or **M** controls to seek, if the curre
 
 1. Install **Fabric Loader 0.19.5 or newer** for your Minecraft version.
 2. Install the matching **Fabric API** from https://modrinth.com/mod/fabric-api.
-3. Download **one** matching `better-music-overlay-<minecraft>-1.5.0.jar` from [GitHub Releases](https://github.com/LootingVI/BetterMusicOverlay/releases/latest) and copy it into your instance's `mods` folder. Remove the previous Better Music JAR when upgrading. Local builds are packaged under `dist/1.5.0/`.
+3. Download **one** matching `better-music-overlay-<minecraft>-1.5.1.jar` from [GitHub Releases](https://github.com/LootingVI/BetterMusicOverlay/releases/latest) and copy it into your instance's `mods` folder. Remove the previous Better Music JAR when upgrading. Local builds are packaged under `dist/1.5.1/`.
 4. Start music in a desktop app or browser and launch Minecraft.
 
 Separate builds are provided for **1.21.11, 26.1, 26.1.1, 26.1.2, 26.2, and 26.3**. Future 26.x releases are not automatically compatible. Minecraft 1.21.11 needs Java 21 or newer; the 26.x builds need Java 25 or newer.
@@ -196,9 +202,13 @@ Primary-source documentation checked on 2026-10-11:
 
 Local LRC takes priority. Online lookup checks title, artist, and available duration within two seconds. Album spelling is a ranking preference; fallback search does not filter by album. Live/remix/acoustic qualifiers are retained. Without a player duration, search first prefers a matching album when available and accepts only results whose durations span no more than two seconds. Otherwise, choose the recording manually. Apple Music's Windows `Artist — Album` format also works when the album field is empty. For other players, an appended album must match independently supplied album metadata, allowing Single/EP suffix differences.
 
+The limited `DJ Artist` → `Artist` credit fallback adds stricter requirements: both album and duration must be known, the normalized album must match, and title and duration must pass the original checks. It runs only when no recording was selected with the complete credit. No general fuzzy artist matching is used.
+
 The card labels the source; **Lyrics → View lyrics source** opens the actual LRCLIB record when available. Requests identify this project, run sequentially with a 250 ms gap, and check HTTP status and content type before decoding JSON. HTTP 429 and 503 respect `Retry-After`, including waits longer than five minutes. Brief overloads get one retry; long cooldowns return immediately to keep the lyric worker responsive. Rich YAML uses a safe parser with size, depth, alias, and duplicate-key restrictions. No timing is synthesized from plain lyrics.
 
 ## Build and verification
+
+Release 1.5.1 was verified on 2026-10-14: **81 tests per target, 486 passes, zero failures**. All three opt-in live lyric checks passed separately, including the supplied Apple Music metadata and an automatic credit-variant match. New regressions cover preference for the complete artist credit, mandatory album/duration agreement, rejected mismatches, and honoring overload/rate-limit cooldowns. All six release JARs passed metadata, dependency, smoke-harness exclusion and SHA-256 checks. The interface and animation checks described below remain from 1.5.0; this hotfix changes lookup behavior only.
 
 Release 1.5.0 was verified on 2026-10-13: **73 tests per target, 438 passes, zero failures**. Four opt-in tests are skipped in regular builds; the raster benchmark and animated preview generator passed separately for this release. Motion regressions cover timestamp boundaries, seeking, Unicode measurement, frame-rate-independent smoothing, reduced motion, independent lyric-animation disabling, and appearance-profile persistence. In-game checks on 1.21.11 and 26.3 exercised the Motion controls, reader, diagnostics, import and rendering presets; compact screens and the HUD were visually inspected. All six release JARs passed metadata, dependency, smoke-harness exclusion and SHA-256 verification.
 

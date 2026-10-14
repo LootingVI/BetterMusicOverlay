@@ -38,4 +38,11 @@ class LrclibClientTest {
         var cancelled=new LrclibClient(request->{sends.incrementAndGet();return new LrclibClient.Reply(200,"application/json","","{}");},clock::get,clock::addAndGet);
         assertThrows(InterruptedException.class,()->cancelled.get("get/1",()->{if(checks.incrementAndGet()==2)throw new InterruptedException();}));assertEquals(0,sends.get());
     }
+    @Test void cooldownReportsRemainingDelayAndDistinguishesRateLimits(){
+        var clock=new AtomicLong(10_000);
+        var busy=new LrclibClient(request->new LrclibClient.Reply(503,"text/plain","1","busy"),clock::get,clock::addAndGet);
+        var overload=assertThrows(LrclibClient.CoolingDown.class,()->busy.get("search?q=Original",()->{}));assertTrue(overload.busy);assertEquals(1000,overload.retryAfterMillis);
+        var limited=new LrclibClient(request->new LrclibClient.Reply(429,"text/plain","90","limited"),clock::get,clock::addAndGet);
+        var rate=assertThrows(LrclibClient.CoolingDown.class,()->limited.get("search?q=Original",()->{}));assertFalse(rate.busy);assertEquals(90_000,rate.retryAfterMillis);
+    }
 }

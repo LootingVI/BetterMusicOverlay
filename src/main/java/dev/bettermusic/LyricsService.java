@@ -158,15 +158,28 @@ public final class LyricsService implements AutoCloseable {
             if(track.duration()>=1&&track.duration()<=3600)exact+="&duration="+track.duration();
             JsonElement response=request("get?"+exact,ticket);
             JsonObject chosen=response!=null&&response.isJsonObject()&&LyricsMatch.matches(response.getAsJsonObject(),track,false)?response.getAsJsonObject():null;
+            Track variant=LyricsMatch.creditVariant(track);
             boolean instrumental=chosen!=null&&chosen.has("instrumental")&&chosen.get("instrumental").getAsBoolean();
             if(!instrumental&&(chosen==null||LyricsMatch.string(chosen,"syncedLyrics").isBlank()&&Lyricsfile.parse(LyricsMatch.string(chosen,"lyricsfile")).lines().isEmpty())){
                 try{JsonElement search=request("search?"+query,ticket);
                     if(search!=null&&search.isJsonArray()){JsonObject alternative=LyricsMatch.best(search.getAsJsonArray(),track);if(alternative!=null)chosen=alternative;}
-                }catch(InterruptedException e){throw e;}catch(Exception e){if(chosen==null)throw e;}
+                }catch(InterruptedException e){throw e;}catch(Exception e){if(chosen==null){
+                    if(variant!=null&&e instanceof LrclibClient.CoolingDown cooldown&&cooldown.busy&&cooldown.retryAfterMillis<=2000){
+                        trace(ticket,"Full-credit search busy; respecting cooldown before alternative credit");
+                        Thread.sleep(Math.max(1,cooldown.retryAfterMillis+1));check(ticket);
+                    }else throw e;
+                }}
+            }
+            boolean creditMatch=false;
+            if(chosen==null&&variant!=null){
+                trace(ticket,"Alternative artist credit: "+debugValue(variant.artist()));
+                JsonElement search=request("search?track_name="+enc(track.title())+"&artist_name="+enc(variant.artist()),ticket,"Artist credit variant search");
+                if(search!=null&&search.isJsonArray()){chosen=LyricsMatch.bestCreditVariant(search.getAsJsonArray(),track);creditMatch=chosen!=null;}
             }
             Result loaded;
             if(chosen==null)loaded=Result.status("No safe automatic match · use Find recording");
             else loaded=record(chosen,false);
+            if(creditMatch)loaded=new Result(loaded.lines(),loaded.plain(),loaded.message()+" · artist credit variant",loaded.source(),loaded.url());
             check(ticket);
             synchronized(cache){if(cache.size()>=30)cache.remove(cache.keySet().iterator().next());cache.put(id,new Cached(loaded,System.nanoTime()+(loaded.lines().isEmpty()?60_000_000_000L:1_800_000_000_000L)));}
             finish(ticket,loaded);
@@ -175,6 +188,9 @@ public final class LyricsService implements AutoCloseable {
     }
     private JsonElement request(String path,long ticket)throws Exception{
         String stage=path.startsWith("get/")?"Saved recording":path.startsWith("get?")?"Exact lookup":path.contains("artist_name=")?"Title + artist search":"Title-only candidate search";
+        return request(path,ticket,stage);
+    }
+    private JsonElement request(String path,long ticket,String stage)throws Exception{
         trace(ticket,stage+": requesting");
         try{
             check(ticket);JsonElement response=provider!=null?provider.get(path):client.get(path,()->check(ticket));check(ticket);

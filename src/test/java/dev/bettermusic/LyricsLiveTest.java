@@ -9,6 +9,19 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Opt-in network test using public sample metadata, never the user's current listening session. */
 class LyricsLiveTest {
     @TempDir Path directory;
+    @Test @EnabledIfEnvironmentVariable(named="BETTERMUSIC_LIVE_TRACK_JSON",matches=".+")
+    void suppliedMetadataResolvesArtistCreditVariant()throws Exception{
+        var metadata=com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(Path.of(System.getenv("BETTERMUSIC_LIVE_TRACK_JSON")))).getAsJsonObject();
+        var track=new Track(metadata.get("title").getAsString(),metadata.get("artist").getAsString(),metadata.get("source").getAsString(),false,12,metadata.get("duration").getAsDouble(),"",System.nanoTime(),metadata.get("album").getAsString());
+        var settings=new Settings();settings.lyrics=true;settings.onlineLyrics=true;
+        try(var service=new LyricsService(directory)){
+            service.update(track,settings);long deadline=System.nanoTime()+35_000_000_000L;
+            while(service.status().equals("Looking for lyrics ...")&&System.nanoTime()<deadline)Thread.sleep(50);
+            assertFalse(service.transcript(track,settings).lines().isEmpty(),service.diagnostics(track,settings));
+            assertTrue(service.status().contains("artist credit"),service.status());
+            System.out.println("ARTIST CREDIT LOOKUP: "+service.sourceUrl()+" / "+service.attribution());
+        }
+    }
     @Test @EnabledIfEnvironmentVariable(named="BETTERMUSIC_LIVE_LYRICS",matches="1")
     void appleMusicWindowsCombinedMetadataFindsZenseryRecording()throws Exception{
         var settings=new Settings();settings.lyrics=true;settings.onlineLyrics=true;

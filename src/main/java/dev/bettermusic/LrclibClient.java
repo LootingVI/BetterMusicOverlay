@@ -11,24 +11,28 @@ import java.util.function.LongSupplier;
 
 /** Sequential, bounded requests. Cooldowns survive reloads and track changes. */
 final class LrclibClient {
-    static final String USER_AGENT="BetterMusicOverlay/1.5.0 (https://github.com/LootingVI/BetterMusicOverlay)";
+    static final String USER_AGENT="BetterMusicOverlay/1.5.1 (https://github.com/LootingVI/BetterMusicOverlay)";
     record Reply(int status,String type,String retryAfter,String body){}
     @FunctionalInterface interface Transport {Reply send(HttpRequest request)throws Exception;}
     @FunctionalInterface interface Pause {void sleep(long millis)throws InterruptedException;}
     @FunctionalInterface interface Check {void run()throws InterruptedException;}
-    static final class CoolingDown extends IOException {CoolingDown(String message){super(message);}}
+    static final class CoolingDown extends IOException {
+        final long retryAfterMillis;final boolean busy;
+        CoolingDown(String message,long retryAfterMillis,boolean busy){super(message);this.retryAfterMillis=retryAfterMillis;this.busy=busy;}
+    }
     private final Transport transport;
     private final LongSupplier clock;
     private final Pause pause;
     private long nextRequest,nextAllowed;
     private String cooldown="LRCLIB busy · wait before reloading";
+    private boolean busyCooldown;
     LrclibClient(HttpClient http){
         this(request->{var response=http.send(request,info->new BoundedBody());return new Reply(response.statusCode(),response.headers().firstValue("Content-Type").orElse(""),response.headers().firstValue("Retry-After").orElse(""),response.body());},System::currentTimeMillis,Thread::sleep);
     }
     LrclibClient(Transport transport,LongSupplier clock,Pause pause){this.transport=transport;this.clock=clock;this.pause=pause;}
     JsonElement get(String path,Check check)throws Exception{
         for(int attempt=0;attempt<2;attempt++){
-            check.run();if(clock.getAsLong()<nextAllowed)throw new CoolingDown(cooldown);
+            check.run();if(clock.getAsLong()<nextAllowed)throw new CoolingDown(cooldown,nextAllowed-clock.getAsLong(),busyCooldown);
             long gap=nextRequest-clock.getAsLong();if(gap>0)pause.sleep(gap);check.run();
             var request=HttpRequest.newBuilder(URI.create("https://lrclib.net/api/"+path)).timeout(Duration.ofSeconds(8)).header("User-Agent",USER_AGENT).header("Accept","application/json").GET().build();
             Reply response;
@@ -38,9 +42,10 @@ final class LrclibClient {
                 long delay=retryMillis(response.retryAfter(),clock.getAsLong(),response.status()==429?60_000:1000);
                 nextAllowed=after(clock.getAsLong(),delay);
                 cooldown=response.status()==429?"LRCLIB rate limit · wait before reloading":"LRCLIB busy · wait before reloading";
+                busyCooldown=response.status()==503;
                 check.run();
                 if(response.status()==503&&attempt==0&&delay<=2000){pause.sleep(delay);continue;}
-                throw new CoolingDown(cooldown);
+                throw new CoolingDown(cooldown,Math.max(0,nextAllowed-clock.getAsLong()),busyCooldown);
             }
             check.run();
             if(response.status()==404)return null;
